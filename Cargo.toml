@@ -1,0 +1,11 @@
+[package]
+name = "cutline-rust"
+version = "0.1.0"
+edition = "2021"
+authors = ["Yiming Zhang <zhangyiming21@mail.ustc.edu.cn>"]
+description = "Search for the optimal cutline of SFA algorithm with different gate patterns."
+readme = "README.md"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
