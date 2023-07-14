@@ -14,12 +14,6 @@ struct Qubit {
     used: bool,
 }
 
-/// Coupler in the primal graph
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
-struct Coupler {
-    used: bool,
-}
-
 /// Router node in the dual graph
 #[derive(Debug, PartialEq, Eq, Hash, Default, Clone, Copy)]
 pub struct Router {
@@ -34,34 +28,6 @@ impl Router {
             x,
             y,
             boundary: false,
-        }
-    }
-}
-
-/// Edge in the dual graph
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum Route {
-    /// Dual edge of a used coupler in the primal graph
-    Real,
-    /// Dual edge of a unused coupler in the primal graph
-    Virtual,
-}
-
-impl Route {
-    fn is_virtual(&self) -> bool {
-        match self {
-            Route::Real => false,
-            Route::Virtual => true,
-        }
-    }
-}
-
-impl From<bool> for Route {
-    fn from(value: bool) -> Self {
-        if value {
-            Route::Real
-        } else {
-            Route::Virtual
         }
     }
 }
@@ -85,8 +51,8 @@ impl Direction {
     }
 }
 
-type PrimalGraph = UnGraph<Qubit, Coupler, u32>;
-type DualGraph = UnGraph<Router, Route, u32>;
+type PrimalGraph = UnGraph<Qubit, bool, u32>;
+type DualGraph = UnGraph<Router, bool, u32>;
 
 /// Search graph in the algorithm
 #[derive(Debug)]
@@ -112,7 +78,7 @@ impl SearchGraph {
     pub fn used_couplers(&self) -> u32 {
         self.primal_graph
             .edge_indices()
-            .filter(|&i| self.primal_graph[i].used)
+            .filter(|&i| self.primal_graph[i])
             .count() as u32
     }
 
@@ -180,10 +146,7 @@ fn create_primal_graph(
                     || unused_couplers.contains(&(q2, q1))
                     || !qubit.used
                     || !qubit2.used;
-                let coupler = Coupler {
-                    used: !coupler_is_unused,
-                };
-                primal_graph.add_edge(q1.into(), q2.into(), coupler);
+                primal_graph.add_edge(q1.into(), q2.into(), !coupler_is_unused);
             }
         }
     }
@@ -191,8 +154,7 @@ fn create_primal_graph(
     // Verify the graph is single connected
     let mut verify_graph = primal_graph.clone();
     verify_graph.retain_edges(|graph, eidx| {
-        let coupler = &graph[eidx];
-        coupler.used
+        graph[eidx]
     });
     verify_graph.retain_nodes(|graph, nidx| {
         let qubit = &graph[nidx];
@@ -204,7 +166,7 @@ fn create_primal_graph(
     Ok(primal_graph)
 }
 
-fn create_dual_graph(primal_graph: &UnGraph<Qubit, Coupler, u32>) -> DualGraph {
+fn create_dual_graph(primal_graph: &PrimalGraph) -> DualGraph {
     let mut dual_graph = UnGraph::default();
     let mut routers = IndexMap::new();
     for eidx in primal_graph.edge_indices() {
@@ -221,7 +183,7 @@ fn create_dual_graph(primal_graph: &UnGraph<Qubit, Coupler, u32>) -> DualGraph {
             .entry(router2)
             .or_insert_with(|| dual_graph.add_node(router2))
             .to_owned();
-        dual_graph.add_edge(n1, n2, primal_graph[eidx].used.into());
+        dual_graph.add_edge(n1, n2, primal_graph[eidx]);
     }
     dual_graph
 }
@@ -246,7 +208,7 @@ fn set_boundary(dual_graph: &mut DualGraph, grid_width: u32, grid_height: u32) {
         if !node.boundary {
             true
         } else {
-            !graph.edges(idx).all(|eref| eref.weight().is_virtual())
+            !graph.edges(idx).all(|eref| !eref.weight())
         }
     });
 }
@@ -261,8 +223,7 @@ fn try_set_boundary(idx: NodeIndex, graph: &mut DualGraph) {
     node.boundary = true;
     let eids = graph.edges(idx).map(|eref| eref.id()).collect::<Vec<_>>();
     for eidx in eids {
-        let edge = graph[eidx];
-        if !edge.is_virtual() {
+        if graph[eidx] {
             continue;
         }
         let (n1, n2) = graph.edge_endpoints(eidx).unwrap();
