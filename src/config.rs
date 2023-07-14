@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::fs::File;
-use anyhow::{Result, Ok};
+use anyhow::Result;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TopologyConfig {

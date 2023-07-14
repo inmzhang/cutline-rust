@@ -55,10 +55,10 @@ impl Direction {
 #[derive(Debug)]
 pub struct SearchGraph {
     /// The primal graph consists of all qubits and couplers, including unused ones
-    primal_graph: UnGraph<Qubit, Coupler>,
+    primal_graph: UnGraph<Qubit, Coupler, u32>,
 
     /// The dual graph consists of routers and edges
-    dual_graph: UnGraph<Router, RouterEdge>,
+    dual_graph: UnGraph<Router, RouterEdge, u32>,
 
     /// Algorithm configure
     config: AlgorithmConfig,
@@ -81,7 +81,7 @@ impl SearchGraph {
 }
 
 impl TryFrom<Config> for SearchGraph {
-    type Error = String;
+    type Error = anyhow::Error;
     fn try_from(value: Config) -> Result<Self, Self::Error> {
         let topology = &value.topology;
         let qubit_at_origin = topology.qubit_at_origin;
@@ -89,6 +89,7 @@ impl TryFrom<Config> for SearchGraph {
             (0..topology.grid_height).flat_map(|y| (0..topology.grid_width).map(move |x| (x, y)));
         let mut qubits = IndexMap::new();
         let mut routers = Vec::new();
+        // Get all qubits and routers
         for cell in full_grid {
             if is_qubit(cell.0, cell.1, qubit_at_origin) {
                 let qid = qubits.len() as u32;
@@ -107,6 +108,7 @@ impl TryFrom<Config> for SearchGraph {
             }
         }
 
+        // Create primal graph
         let mut primal_graph = UnGraph::default();
         for qubit in qubits.values() {
             primal_graph.add_node(*qubit);
@@ -131,14 +133,13 @@ impl TryFrom<Config> for SearchGraph {
             }
         }
 
+        // Create dual graph
         let dual_graph = UnGraph::default();
-
-        let config = value.algorithm;
 
         Ok(SearchGraph {
             primal_graph,
             dual_graph,
-            config,
+            config: value.algorithm,
         })
     }
 }
