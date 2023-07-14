@@ -1,6 +1,8 @@
-use crate::config::{AlgorithmConfig, Config};
-use petgraph::graph::UnGraph;
+use crate::config::{AlgorithmConfig, Config, TopologyConfig};
+use anyhow::{Result, Ok, bail};
 use indexmap::IndexMap;
+use petgraph::graph::UnGraph;
+use petgraph::algo::connected_components;
 
 /// Qubit in the primal graph
 #[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]
@@ -12,7 +14,7 @@ struct Qubit {
 }
 
 /// Coupler in the primal graph
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 struct Coupler {
     q1: u32,
     q2: u32,
@@ -21,7 +23,11 @@ struct Coupler {
 
 /// Router node in the dual graph
 #[derive(Debug, PartialEq, Eq, Hash)]
-pub struct Router(u32, u32);
+pub struct Router {
+    x: u32,
+    y: u32,
+    boundary: bool,
+}
 
 /// Edge in the dual graph
 #[derive(Debug)]
@@ -78,71 +84,98 @@ impl SearchGraph {
             .filter(|&i| self.primal_graph[i].used)
             .count() as u32
     }
-}
 
-impl TryFrom<Config> for SearchGraph {
-    type Error = anyhow::Error;
-    fn try_from(value: Config) -> Result<Self, Self::Error> {
-        let topology = &value.topology;
-        let qubit_at_origin = topology.qubit_at_origin;
-        let full_grid =
-            (0..topology.grid_height).flat_map(|y| (0..topology.grid_width).map(move |x| (x, y)));
-        let mut qubits = IndexMap::new();
-        let mut routers = Vec::new();
-        // Get all qubits and routers
-        for cell in full_grid {
-            if is_qubit(cell.0, cell.1, qubit_at_origin) {
-                let qid = qubits.len() as u32;
-                let used = !topology.unused_qubits.contains(&qid);
-                qubits.insert(
-                    cell,
-                    Qubit {
-                        x: cell.0,
-                        y: cell.1,
-                        qid,
-                        used,
-                    },
-                );
-            } else {
-                routers.push(Router(cell.0, cell.1));
-            }
-        }
-
-        // Create primal graph
-        let mut primal_graph = UnGraph::default();
-        for qubit in qubits.values() {
-            primal_graph.add_node(*qubit);
-        }
-        for (position, qubit) in &qubits {
-            for direction in [Direction::UL, Direction::UR] {
-                let position2 = direction.apply(*position);
-                if let Some(qubit2) = qubits.get(&position2) {
-                    let q1 = qubit.qid;
-                    let q2 = qubit2.qid;
-                    let coupler_is_unused = topology.unused_couplers.contains(&(q1, q2))
-                        || topology.unused_couplers.contains(&(q2, q1))
-                        || !qubit.used
-                        || !qubit2.used;
-                    let coupler = Coupler {
-                        q1,
-                        q2,
-                        used: !coupler_is_unused,
-                    };
-                    primal_graph.add_edge(q1.into(), q2.into(), coupler);
-                }
-            }
-        }
-
-        // Create dual graph
+    pub fn from_config(config: Config) -> Result<Self> {
+        let (qubits, _routers) = create_qubits_and_routers(&config.topology);
+        let primal_graph = create_primal_graph(&qubits, &config.topology.unused_couplers)?;
         let dual_graph = UnGraph::default();
-
         Ok(SearchGraph {
             primal_graph,
             dual_graph,
-            config: value.algorithm,
+            config: config.algorithm,
         })
     }
 }
+
+fn create_qubits_and_routers(
+    topology: &TopologyConfig,
+) -> (IndexMap<(u32, u32), Qubit>, Vec<Router>) {
+    let full_grid =
+        (0..topology.grid_height).flat_map(|y| (0..topology.grid_width).map(move |x| (x, y)));
+    let mut qubits = IndexMap::new();
+    let mut routers = Vec::new();
+    // Get all qubits and routers
+    for cell in full_grid {
+        if is_qubit(cell.0, cell.1, topology.qubit_at_origin) {
+            let qid = qubits.len() as u32;
+            let used = !topology.unused_qubits.contains(&qid);
+            qubits.insert(
+                cell,
+                Qubit {
+                    x: cell.0,
+                    y: cell.1,
+                    qid,
+                    used,
+                },
+            );
+        } else {
+            let boundary =
+                if cell.0 == 0 || cell.0 == topology.grid_width || cell.1 == 0 || cell.1 == topology.grid_height {
+                    true
+                } else {
+                    false
+                };
+            routers.push(Router {
+                x: cell.0,
+                y: cell.1,
+                boundary,
+            });
+        }
+    }
+    (qubits, routers)
+}
+
+fn create_primal_graph(
+    qubits: &IndexMap<(u32, u32), Qubit>,
+    unused_couplers: &[(u32, u32)],
+) -> Result<UnGraph<Qubit, Coupler, u32>> {
+    let mut primal_graph = UnGraph::default();
+    for qubit in qubits.values() {
+        primal_graph.add_node(*qubit);
+    }
+    for (position, qubit) in qubits {
+        for direction in [Direction::UL, Direction::UR] {
+            let position2 = direction.apply(*position);
+            if let Some(qubit2) = qubits.get(&position2) {
+                let q1 = qubit.qid;
+                let q2 = qubit2.qid;
+                let coupler_is_unused = unused_couplers.contains(&(q1, q2))
+                    || unused_couplers.contains(&(q2, q1))
+                    || !qubit.used
+                    || !qubit2.used;
+                let coupler = Coupler {
+                    q1,
+                    q2,
+                    used: !coupler_is_unused,
+                };
+                primal_graph.add_edge(q1.into(), q2.into(), coupler);
+            }
+        }
+    }
+
+    let verify_graph = primal_graph.clone();
+    if connected_components(&primal_graph) > 1 {
+        bail!("The primal graph has more than 1 connected components.");
+    }
+    Ok(primal_graph)
+}
+
+// fn create_dual_graph(
+//     routers: &[Router],
+//     primal_graph: &UnGraph<Qubit, Coupler, u32>,
+// ) -> UnGraph<Router, Route, u32> {
+
+// }
 
 fn is_qubit(x: u32, y: u32, start_at_origin: bool) -> bool {
     if y % 2 == 0 {
@@ -158,22 +191,30 @@ fn is_qubit(x: u32, y: u32, start_at_origin: bool) -> bool {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
+    use petgraph::visit::NodeIndexable;
+
     use super::*;
-    use petgraph::graph::NodeIndex;
 
     #[test]
     fn test_search_graph_basic() {
         let mut config = Config::default();
 
         config.topology.unused_qubits.push(1);
-        let graph: SearchGraph = config.try_into().unwrap();
+        let graph = SearchGraph::from_config(config).unwrap();
         assert_eq!(graph.used_qubits(), 66 - 1);
         assert_eq!(graph.used_couplers(), 110 - 2);
         let primal_graph = &graph.primal_graph;
-        assert!(!primal_graph[NodeIndex::from(1)].used);
-        assert!(primal_graph[NodeIndex::from(55)].used);
+        assert!(!primal_graph[primal_graph.from_index(1)].used);
+        assert!(primal_graph[primal_graph.from_index(55)].used);
+    }
+
+    #[test]
+    fn test_more_than_one_cc() {
+        let mut config = Config::default();
+        config.topology.unused_qubits.push(11);
+        let graph = SearchGraph::from_config(config);
+        assert!(graph.is_err());
     }
 }
