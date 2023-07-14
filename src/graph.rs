@@ -1,6 +1,6 @@
 use crate::config::{AlgorithmConfig, Config};
 use petgraph::graph::UnGraph;
-use std::collections::HashMap;
+use indexmap::IndexMap;
 
 /// Qubit in the primal graph
 #[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]
@@ -87,7 +87,7 @@ impl TryFrom<Config> for SearchGraph {
         let qubit_at_origin = topology.qubit_at_origin;
         let full_grid =
             (0..topology.grid_height).flat_map(|y| (0..topology.grid_width).map(move |x| (x, y)));
-        let mut qubits = HashMap::new();
+        let mut qubits = IndexMap::new();
         let mut routers = Vec::new();
         for cell in full_grid {
             if is_qubit(cell.0, cell.1, qubit_at_origin) {
@@ -108,15 +108,12 @@ impl TryFrom<Config> for SearchGraph {
         }
 
         let mut primal_graph = UnGraph::default();
-        let mut sorted_qubits = qubits.iter().map(|(_, &v)| v).collect::<Vec<_>>();
-        sorted_qubits.sort_by_key(|v| v.qid);
-        for qubit in &sorted_qubits {
+        for qubit in qubits.values() {
             primal_graph.add_node(*qubit);
         }
-        for qubit in sorted_qubits {
-            let position = (qubit.x, qubit.y);
+        for (position, qubit) in &qubits {
             for direction in [Direction::UL, Direction::UR] {
-                let position2 = direction.apply(position);
+                let position2 = direction.apply(*position);
                 if let Some(qubit2) = qubits.get(&position2) {
                     let q1 = qubit.qid;
                     let q2 = qubit2.qid;
