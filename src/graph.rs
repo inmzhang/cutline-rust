@@ -25,10 +25,10 @@ pub struct Router(u32, u32);
 
 /// Edge in the dual graph
 #[derive(Debug)]
-pub enum RouterEdge {
-    /// Dual edge of a working coupler in the primal graph
+pub enum Route {
+    /// Dual edge of a used coupler in the primal graph
     Real,
-    /// Dual edge of a broken coupler in the primal graph
+    /// Dual edge of a unused coupler in the primal graph
     Virtual,
 }
 
@@ -58,7 +58,7 @@ pub struct SearchGraph {
     primal_graph: UnGraph<Qubit, Coupler, u32>,
 
     /// The dual graph consists of routers and edges
-    dual_graph: UnGraph<Router, RouterEdge, u32>,
+    dual_graph: UnGraph<Router, Route, u32>,
 
     /// Algorithm configure
     config: AlgorithmConfig,
