@@ -163,8 +163,17 @@ fn create_primal_graph(
         }
     }
 
-    let verify_graph = primal_graph.clone();
-    if connected_components(&primal_graph) > 1 {
+    // Verify the graph is single connected
+    let mut verify_graph = primal_graph.clone();
+    verify_graph.retain_edges(|graph, eidx| {
+        let coupler = &graph[eidx];
+        coupler.used
+    });
+    verify_graph.retain_nodes(|graph, nidx| {
+        let qubit = &graph[nidx];
+        qubit.used
+    });
+    if connected_components(&verify_graph) > 1 {
         bail!("The primal graph has more than 1 connected components.");
     }
     Ok(primal_graph)
@@ -214,6 +223,11 @@ mod tests {
     fn test_more_than_one_cc() {
         let mut config = Config::default();
         config.topology.unused_qubits.push(11);
+        let graph = SearchGraph::from_config(config);
+        assert!(graph.is_err());
+
+        let mut config = Config::default();
+        config.topology.unused_couplers.extend([(11, 17), (23, 17)]);
         let graph = SearchGraph::from_config(config);
         assert!(graph.is_err());
     }
