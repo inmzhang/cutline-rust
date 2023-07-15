@@ -2,17 +2,14 @@
 
 Rust implementation of the "optimal SFA cutline and pattern finding" algorithm. This is a rewrite of the javascript version which is implemented by Youwei Zhao to gain a speed boost.
 
-## Improvements
+# Plan
 
-Compared to the javascript version, this implementation has some improvements:
-
-- _Exhaustive pattern search_: previous version did not take mid-position broken qubits and rotated unparallel pattern alignment into account. This version will search for all possible patterns and calculate the optimal complexity.
-
-- _Speedup_: speed is the main concern of this rewrite.
-
-
-## Steps
-
-1. exhaustive pattern search
-2. partition search
-3. parallel cost function calculation for each pattern
+- [x] construct the basic graph data structure using `petgraph`
+- [ ] impl the same pattern finding algorithm as the javascript version
+- [ ] impl the path searching
+- [ ] impl cost calculation for a single pattern
+- [ ] paralle cost calculation across patterns using `rayon`
+- [ ] visualize the result using svg
+- [ ] (Optional)use `leptos` framework to visualize and interact with the algorithm
+- [ ] (Optional)extend the pattern finding to do exhaustive pattern search
+- [ ] (Optional)cut the grid into more than two parts
