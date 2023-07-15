@@ -6,7 +6,7 @@ Rust implementation of the "optimal SFA cutline and pattern finding" algorithm. 
 
 - [x] construct the basic graph data structure using `petgraph`
 - [ ] impl the same pattern finding algorithm as the javascript version
-- [ ] impl the path searching
+- [ ] impl the path searching, use ray casting algorithm to calculate the unbalance(unbalance calc is parallable across nodes but maybe not worth it)
 - [ ] impl cost calculation for a single pattern
 - [ ] paralle cost calculation across patterns using `rayon`
 - [ ] visualize the result using svg
