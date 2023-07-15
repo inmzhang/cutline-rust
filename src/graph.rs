@@ -14,9 +14,15 @@ struct Qubit {
     used: bool,
 }
 
+impl Qubit {
+    fn new(x: u32, y: u32, qid: u32, used: bool) -> Self {
+        Qubit { x, y, qid, used }
+    }
+}
+
 /// Router node in the dual graph
 #[derive(Debug, PartialEq, Eq, Hash, Default, Clone, Copy)]
-pub struct Router {
+struct Router {
     x: u32,
     y: u32,
     boundary: bool,
@@ -110,21 +116,13 @@ fn create_qubits(topology: &TopologyConfig) -> IndexMap<(u32, u32), Qubit> {
         (0..topology.grid_height).flat_map(|y| (0..topology.grid_width).map(move |x| (x, y)));
     let mut qubits = IndexMap::new();
     // Get all qubits and routers
-    for cell in full_grid {
-        if is_qubit(cell.0, cell.1, topology.qubit_at_origin) {
+    full_grid
+        .filter(|cell| is_qubit(cell.0, cell.1, topology.qubit_at_origin))
+        .for_each(|cell| {
             let qid = qubits.len() as u32;
             let used = !topology.unused_qubits.contains(&qid);
-            qubits.insert(
-                cell,
-                Qubit {
-                    x: cell.0,
-                    y: cell.1,
-                    qid,
-                    used,
-                },
-            );
-        }
-    }
+            qubits.insert(cell, Qubit::new(cell.0, cell.1, qid, used));
+        });
     qubits
 }
 
@@ -153,9 +151,7 @@ fn create_primal_graph(
 
     // Verify the graph is single connected
     let mut verify_graph = primal_graph.clone();
-    verify_graph.retain_edges(|graph, eidx| {
-        graph[eidx]
-    });
+    verify_graph.retain_edges(|graph, eidx| graph[eidx]);
     verify_graph.retain_nodes(|graph, nidx| {
         let qubit = &graph[nidx];
         qubit.used
@@ -233,16 +229,16 @@ fn try_set_boundary(idx: NodeIndex, graph: &mut DualGraph) {
 }
 
 fn is_qubit(x: u32, y: u32, start_at_origin: bool) -> bool {
-    if y % 2 == 0 {
+    if y & 1 == 0 {
         if start_at_origin {
-            x % 2 == 0
+            x & 1 == 0
         } else {
-            x % 2 == 1
+            x & 1 == 1
         }
     } else if start_at_origin {
-        x % 2 == 1
+        x & 1 == 1
     } else {
-        x % 2 == 0
+        x & 1 == 0
     }
 }
 
