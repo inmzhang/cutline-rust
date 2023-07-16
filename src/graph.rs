@@ -3,7 +3,6 @@ use anyhow::{bail, Ok, Result};
 use indexmap::IndexMap;
 use petgraph::algo::connected_components;
 use petgraph::graph::{NodeIndex, UnGraph};
-use petgraph::visit::EdgeRef;
 
 /// Qubit in the primal graph
 #[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]
@@ -57,8 +56,8 @@ impl Direction {
     }
 }
 
-type PrimalGraph = UnGraph<Qubit, bool, u32>;
-type DualGraph = UnGraph<Router, bool, u32>;
+pub type PrimalGraph = UnGraph<Qubit, bool, u32>;
+pub type DualGraph = UnGraph<Router, bool, u32>;
 
 /// Search graph in the algorithm
 #[derive(Debug)]
@@ -92,11 +91,15 @@ impl SearchGraph {
         let qubits = create_qubits(&config.topology);
         let primal_graph = create_primal_graph(&qubits, &config.topology.unused_couplers)?;
         let mut dual_graph = create_dual_graph(&primal_graph);
+        // Set the boundary nodes
         set_boundary(
             &mut dual_graph,
             config.topology.grid_width,
             config.topology.grid_height,
         );
+        // Remove all dangling nodes
+        remove_dangling_nodes(&mut dual_graph);
+
         Ok(SearchGraph {
             primal_graph,
             dual_graph,
@@ -198,15 +201,10 @@ fn set_boundary(dual_graph: &mut DualGraph, grid_width: u32, grid_height: u32) {
     for idx in initial_boundaries {
         try_set_boundary(idx, dual_graph)
     }
-    // Remove all dangling boundary nodes
-    dual_graph.retain_nodes(|graph, idx| {
-        let node = graph[idx];
-        if !node.boundary {
-            true
-        } else {
-            !graph.edges(idx).all(|eref| !eref.weight())
-        }
-    });
+}
+
+fn remove_dangling_nodes(dual_graph: &mut DualGraph) {
+    dual_graph.retain_nodes(|graph, idx| !graph.edges(idx).all(|eref| !eref.weight()));
 }
 
 fn try_set_boundary(idx: NodeIndex, graph: &mut DualGraph) {
@@ -217,12 +215,12 @@ fn try_set_boundary(idx: NodeIndex, graph: &mut DualGraph) {
         return;
     }
     node.boundary = true;
-    let eids = graph.edges(idx).map(|eref| eref.id()).collect::<Vec<_>>();
-    for eidx in eids {
-        if graph[eidx] {
+    let mut neighbor_edges = graph.neighbors(idx).detach();
+    while let Some(edge) = neighbor_edges.next_edge(graph) {
+        if graph[edge] {
             continue;
         }
-        let (n1, n2) = graph.edge_endpoints(eidx).unwrap();
+        let (n1, n2) = graph.edge_endpoints(edge).unwrap();
         let target = if n1 != idx { n1 } else { n2 };
         try_set_boundary(target, graph)
     }
@@ -308,5 +306,15 @@ mod tests {
         let n2 = find_node_at_position!(dual_graph, 10, 2).unwrap();
         assert!(dual_graph[n1].boundary);
         assert!(dual_graph[n2].boundary);
+    }
+
+    #[test]
+    fn test_middle_dangling() {
+        let mut config = Config::default();
+        config.topology.unused_qubits.extend([33, 34]);
+        let graph = SearchGraph::from_config(config).unwrap();
+        let dual_graph = &graph.dual_graph;
+        assert_eq!(dual_graph.node_count(), 66 - 1);
+        assert_eq!(dual_graph.edge_count(), 110 - 4)
     }
 }
