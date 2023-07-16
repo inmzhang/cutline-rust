@@ -2,42 +2,41 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::fs::File;
 use anyhow::Result;
+use derive_builder::Builder;
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Builder)]
 pub struct TopologyConfig {
+    #[builder(default = "12")]
     pub grid_width: u32,
+    #[builder(default = "11")]
     pub grid_height: u32,
+    #[builder(default = "Vec::new()")]
     pub unused_qubits: Vec<u32>,
+    #[builder(default = "Vec::new()")]
     pub unused_couplers: Vec<(u32, u32)>,
+    #[builder(default = "false")]
     pub qubit_at_origin: bool,
 }
 
 impl Default for TopologyConfig {
     fn default() -> Self {
-        TopologyConfig {
-            grid_width: 12,
-            grid_height: 11,
-            unused_qubits: vec![],
-            unused_couplers: vec![],
-            qubit_at_origin: false,
-        }
+        TopologyConfigBuilder::default().build().unwrap()
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Builder)]
 pub struct AlgorithmConfig {
+    #[builder(default = "20")]
     pub circuit_depth: u32,
+    #[builder(default = "10")]
     pub max_search_depth: u32,
+    #[builder(default = "11")]
     pub max_unbalance: u32,
 }
 
 impl Default for AlgorithmConfig {
     fn default() -> Self {
-        AlgorithmConfig {
-            circuit_depth: 20,
-            max_search_depth: 10,
-            max_unbalance: 11,
-        }
+        AlgorithmConfigBuilder::default().build().unwrap()
     }
 }
 
