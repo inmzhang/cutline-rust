@@ -64,8 +64,8 @@ fn search_pattern_rec(
             continue;
         }
         searched_nodes.push(idx);
-        let mut edge_unassigned = SmallVec::<[EdgeIndex; 4]>::new();
-        let mut order_assigned = SmallVec::<[Order; 4]>::new();
+        let mut edge_unassigned = SmallVec::<[EdgeIndex; 4]>::with_capacity(4);
+        let mut order_assigned = SmallVec::<[Order; 4]>::with_capacity(4);
         for eref in dual_graph.edges(idx) {
             if !eref.weight() {
                 continue;
@@ -89,8 +89,8 @@ fn search_pattern_rec(
         debug_assert!(n_unassigned <= order_unassigned.clone().count());
         for order in order_unassigned.permutations(n_unassigned) {
             let mut new_pattern = base_pattern.clone();
-            for (order, eidx) in order.iter().zip(edge_unassigned.iter()) {
-                new_pattern[eidx.index()] = *order;
+            for (o, eidx) in order.iter().zip(edge_unassigned.iter()) {
+                new_pattern[eidx.index()] = *o;
             }
             let searched_patterns = search_pattern_rec(dual_graph, new_pattern, searched_nodes);
             patterns.extend(searched_patterns);
@@ -108,8 +108,8 @@ mod tests {
     #[test]
     fn test_pattern_search() {
         let topo = TopologyConfigBuilder::default()
-            .grid_width(5)
-            .grid_height(4)
+            .grid_width(12)
+            .grid_height(11)
             .build()
             .unwrap();
         let config = Config {
