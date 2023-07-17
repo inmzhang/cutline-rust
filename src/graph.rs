@@ -7,10 +7,10 @@ use petgraph::graph::{NodeIndex, UnGraph};
 /// Qubit in the primal graph
 #[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]
 pub struct Qubit {
-    x: u32,
-    y: u32,
-    qid: u32,
-    used: bool,
+    pub x: u32,
+    pub y: u32,
+    pub qid: u32,
+    pub used: bool,
 }
 
 impl Qubit {
@@ -22,9 +22,9 @@ impl Qubit {
 /// Router node in the dual graph
 #[derive(Debug, PartialEq, Eq, Hash, Default, Clone, Copy)]
 pub struct Router {
-    x: u32,
-    y: u32,
-    boundary: bool,
+    pub x: u32,
+    pub y: u32,
+    pub boundary: bool,
 }
 
 impl Router {
@@ -315,6 +315,6 @@ mod tests {
         let graph = SearchGraph::from_config(config).unwrap();
         let dual_graph = &graph.dual_graph;
         assert_eq!(dual_graph.node_count(), 66 - 1);
-        assert_eq!(dual_graph.edge_count(), 110 -4)
+        assert_eq!(dual_graph.edge_count(), 110 - 4)
     }
 }
