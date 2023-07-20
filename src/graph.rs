@@ -2,7 +2,8 @@ use crate::config::{AlgorithmConfig, Config, TopologyConfig};
 use anyhow::{bail, Ok, Result};
 use indexmap::IndexMap;
 use petgraph::algo::connected_components;
-use petgraph::graph::{NodeIndex, UnGraph};
+use petgraph::graph::{EdgeIndex, NodeIndex, UnGraph};
+use std::collections::HashMap;
 
 /// Qubit in the primal graph
 #[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]
@@ -111,6 +112,38 @@ impl SearchGraph {
         self.dual_graph
             .node_indices()
             .filter(|&i| self.dual_graph[i].boundary)
+    }
+
+    pub fn get_map_from_dual_to_pos(&self) -> HashMap<EdgeIndex, (u32, u32)> {
+        self.dual_graph
+            .edge_indices()
+            .map(|eidx| {
+                let (n1, n2) = self.dual_graph.edge_endpoints(eidx).unwrap();
+                let q1 = self.dual_graph[n1];
+                let q2 = self.dual_graph[n2];
+                (eidx, (q1.x + q2.x, q1.y + q2.y))
+            })
+            .collect()
+    }
+
+    pub fn get_map_from_pos_to_primal(&self) -> HashMap<(u32, u32), EdgeIndex> {
+        self.primal_graph
+            .edge_indices()
+            .map(|eidx| {
+                let (n1, n2) = self.primal_graph.edge_endpoints(eidx).unwrap();
+                let q1 = self.primal_graph[n1];
+                let q2 = self.primal_graph[n2];
+                ((q1.x + q2.x, q1.y + q2.y), eidx)
+            })
+            .collect()
+    }
+
+    pub fn get_map_from_dual_to_primal(&self) -> HashMap<EdgeIndex, EdgeIndex> {
+        let dual_pos_map = self.get_map_from_dual_to_pos();
+        let pos_primal_map = self.get_map_from_pos_to_primal();
+        dual_pos_map.into_iter().map(|(eidx, pos)| {
+            (eidx, pos_primal_map[&pos])
+        }).collect()
     }
 }
 

@@ -2,7 +2,7 @@ use crate::graph::PrimalGraph;
 use itertools::Itertools;
 use petgraph::{
     graph::{EdgeIndex, NodeIndex},
-    visit::{EdgeIndexable, EdgeRef},
+    visit::EdgeRef,
 };
 use smallvec::SmallVec;
 use std::{
@@ -10,6 +10,10 @@ use std::{
     fmt::Display,
     ops::{Deref, DerefMut},
 };
+
+pub trait Pattern {
+    fn look_up(&self, edge_idx: EdgeIndex) -> Order;
+}
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub enum Order {
@@ -37,14 +41,9 @@ impl Order {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Pattern(Vec<Order>);
+pub struct ExhuastivePattern(Vec<Order>);
 
-impl Pattern {
-    fn look_up(&self, edge_idx: EdgeIndex) -> Order {
-        let idx = edge_idx.index();
-        self.0[idx]
-    }
-
+impl ExhuastivePattern {
     /// Get the mapping from the coupler coordinate to the order
     pub fn get_pattern_map(&self, primal_graph: &PrimalGraph) -> HashMap<(u32, u32), Order> {
         let mut map = HashMap::new();
@@ -60,7 +59,14 @@ impl Pattern {
     }
 }
 
-impl Display for Pattern {
+impl Pattern for ExhuastivePattern {
+    fn look_up(&self, edge_idx: EdgeIndex) -> Order {
+        let idx = edge_idx.index();
+        self.0[idx]
+    }
+}
+
+impl Display for ExhuastivePattern {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for order in self.0.iter() {
             write!(f, "{}", order.as_str())?;
@@ -69,20 +75,21 @@ impl Display for Pattern {
     }
 }
 
-impl Deref for Pattern {
+impl Deref for ExhuastivePattern {
     type Target = Vec<Order>;
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-impl DerefMut for Pattern {
+impl DerefMut for ExhuastivePattern {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }
 
-pub fn print_pattern_in_2d(pattern: &Pattern, primal_graph: &PrimalGraph) {
+/// Print the pattern in 2D only for debugging purpose
+pub fn print_pattern_in_2d(pattern: &ExhuastivePattern, primal_graph: &PrimalGraph) {
     let map = pattern.get_pattern_map(primal_graph);
     let max_x = map.keys().map(|&(x, _)| x).max().unwrap();
     let max_y = map.keys().map(|&(_, y)| y).max().unwrap();
@@ -98,18 +105,18 @@ pub fn print_pattern_in_2d(pattern: &Pattern, primal_graph: &PrimalGraph) {
 }
 
 /// Search for all the pattern in the dual graph exhaustively
-pub fn search_pattern(primal_graph: &PrimalGraph) -> Vec<Pattern> {
+pub fn search_pattern_exhaustive(primal_graph: &PrimalGraph) -> Vec<ExhuastivePattern> {
     let n_edges = primal_graph.edge_count();
-    let base_pattern = Pattern(vec![Order::None; n_edges]);
+    let base_pattern = ExhuastivePattern(vec![Order::None; n_edges]);
     let searched_node = Vec::new();
     search_pattern_rec(primal_graph, base_pattern, searched_node)
 }
 
 fn search_pattern_rec(
     primal_graph: &PrimalGraph,
-    base_pattern: Pattern,
+    base_pattern: ExhuastivePattern,
     mut searched_nodes: Vec<NodeIndex>,
-) -> Vec<Pattern> {
+) -> Vec<ExhuastivePattern> {
     let mut patterns = Vec::new();
     if primal_graph.node_count() == searched_nodes.len() {
         patterns.push(base_pattern);
@@ -148,7 +155,7 @@ fn search_pattern_rec(
                     let target_n = if n1 != idx { n1 } else { n2 };
                     let (allowed_orders, _) =
                         unassigned_order_and_edges(target_n, primal_graph, &base_pattern);
-                    allowed_orders.contains(&order)
+                    allowed_orders.contains(order)
                 })
         });
     for order in allowed_orders {
@@ -163,10 +170,10 @@ fn search_pattern_rec(
     patterns
 }
 
-fn unassigned_order_and_edges<'a>(
+fn unassigned_order_and_edges(
     idx: NodeIndex,
     primal_graph: &PrimalGraph,
-    base_pattern: &Pattern,
+    base_pattern: &ExhuastivePattern,
 ) -> (SmallVec<[Order; 4]>, SmallVec<[EdgeIndex; 4]>) {
     let mut assigned_order = SmallVec::<[Order; 4]>::with_capacity(4);
     let mut unassigned_edges = SmallVec::<[EdgeIndex; 4]>::with_capacity(4);
@@ -197,7 +204,7 @@ mod tests {
     use crate::graph::*;
 
     #[test]
-    fn test_pattern_search() {
+    fn test_exhuastive_pattern_small_grid() {
         let topo = TopologyConfigBuilder::default()
             .grid_width(4)
             .grid_height(3)
@@ -209,7 +216,8 @@ mod tests {
         };
         let graph = SearchGraph::from_config(config).unwrap();
         let primal_graph = &graph.primal_graph;
-        let patterns = search_pattern(primal_graph);
-        dbg!(patterns.len());
+        let patterns = search_pattern_exhaustive(primal_graph);
+        // println!("Found {} patterns", patterns.len());
+        assert_eq!(patterns.len(), 168)
     }
-}
+} 
