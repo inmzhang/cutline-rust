@@ -8,9 +8,9 @@ lazy_static! {
     static ref GRAPH: graph::SearchGraph = {
         let topo = config::TopologyConfigBuilder::default()
             .qubit_at_origin(true)
-            .grid_width(5)
-            .grid_height(4)
-            .unused_qubits(vec![])
+            .grid_width(4)
+            .grid_height(3)
+            .unused_qubits(vec![21])
             .build()
             .unwrap();
         graph::SearchGraph::from_config(topo).unwrap()
@@ -19,10 +19,7 @@ lazy_static! {
 
 fn main() {
     let vec_patterns = search_pattern::search_vec_patterns(&GRAPH);
+    println!("Found {} vec patterns", vec_patterns.len());
     let bit_patterns = search_pattern::search_bit_patterns(&GRAPH);
-    println!(
-        "Found {} patterns in total, {} patterns for bit pattern",
-        vec_patterns.len(),
-        bit_patterns.count()
-    )
+    println!("Found {} bit patterns", bit_patterns.count());
 }
