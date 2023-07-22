@@ -4,7 +4,7 @@ use std::fs::File;
 use anyhow::Result;
 use derive_builder::Builder;
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Builder)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Builder, Clone)]
 pub struct TopologyConfig {
     #[builder(default = "12")]
     pub grid_width: u32,

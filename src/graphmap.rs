@@ -4,11 +4,12 @@ use indexmap::IndexMap;
 use itertools::Itertools;
 use petgraph::{algo::connected_components, graphmap::UnGraphMap};
 
-type CutGraph = UnGraphMap<(u32, u32), bool>;
-type Point = (u32, u32);
+pub type CutGraph = UnGraphMap<(u32, u32), bool>;
+pub type Point = (u32, u32);
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SearchGraph {
+    pub config: TopologyConfig,
     pub primal: CutGraph,
     pub dual: CutGraph,
     pub unused_qubits: Vec<Point>,
@@ -19,16 +20,25 @@ impl SearchGraph {
     pub fn from_config(config: TopologyConfig) -> Result<Self> {
         let (primal, unused_qubits) = create_primal(&config)?;
         let mut dual = create_dual(&primal);
-        let mut dual_boundaries = get_dual_boundary(&dual, config.grid_width, config.grid_height);
+        let width = config.grid_width;
+        let height = config.grid_height;
+        let mut dual_boundaries = get_dual_boundary(&dual, width, height);
         let removed_nodes = remove_dangling_nodes(&mut dual);
-        dual_boundaries.retain(|n| !removed_nodes.contains(n));  
+        dual_boundaries.retain(|n| !removed_nodes.contains(n));
         Ok(Self {
+            config,
             primal,
             unused_qubits,
             dual,
             dual_boundaries,
         })
     }
+}
+
+pub fn duality_map(p1: Point, p2: Point) -> (Point, Point) {
+    let dual_p1 = (p1.0, p2.1);
+    let dual_p2 = (p2.0, p1.1);
+    (dual_p1, dual_p2)
 }
 
 fn create_primal(config: &TopologyConfig) -> Result<(CutGraph, Vec<Point>)> {
@@ -98,8 +108,7 @@ fn verify_single_connected(graph: &CutGraph, unused_qubits: &Vec<Point>) -> Resu
 fn create_dual(primal: &CutGraph) -> CutGraph {
     let mut dual_graph = UnGraphMap::new();
     for (q1, q2, &used) in primal.all_edges() {
-        let router1 = (q1.0, q2.1);
-        let router2 = (q2.0, q1.1);
+        let (router1, router2) = duality_map(q1, q2);
         dual_graph.add_edge(router1, router2, used);
     }
     dual_graph
@@ -212,6 +221,6 @@ mod tests {
         let graph = SearchGraph::from_config(config).unwrap();
         let dual_graph = &graph.dual;
         assert_eq!(dual_graph.node_count(), 66 - 1);
-        assert_eq!(dual_graph.edge_count(), 110 - 4)
+        assert_eq!(dual_graph.edge_count(), 110 - 4);
     }
 }
