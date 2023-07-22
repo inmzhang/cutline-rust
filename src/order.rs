@@ -23,6 +23,18 @@ impl Order {
     }
 }
 
+impl From<String> for Order {
+    fn from(s: String) -> Self {
+        match s.as_str() {
+            "A" => Order::A,
+            "B" => Order::B,
+            "C" => Order::C,
+            "D" => Order::D,
+            _ => panic!("Invalid order: {}", s),
+        }
+    }
+}
+
 pub trait Query {
     fn look_up(&self, n1: Point, n2: Point, graph: &SearchGraph) -> Option<Order>;
 }

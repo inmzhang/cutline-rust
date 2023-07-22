@@ -4,8 +4,8 @@ use indexmap::IndexMap;
 use itertools::Itertools;
 use petgraph::{algo::connected_components, graphmap::UnGraphMap};
 
-pub type CutGraph = UnGraphMap<(u32, u32), bool>;
-pub type Point = (u32, u32);
+pub type CutGraph = UnGraphMap<(i32, i32), bool>;
+pub type Point = (i32, i32);
 
 #[derive(Debug, Clone)]
 pub struct SearchGraph {
@@ -35,6 +35,13 @@ impl SearchGraph {
     }
 }
 
+impl Default for SearchGraph {
+    fn default() -> Self {
+        let config = TopologyConfig::default();
+        Self::from_config(config).unwrap()
+    }
+}
+
 pub fn duality_map(p1: Point, p2: Point) -> (Point, Point) {
     let dual_p1 = (p1.0, p2.1);
     let dual_p2 = (p2.0, p1.1);
@@ -49,19 +56,19 @@ fn create_primal(config: &TopologyConfig) -> Result<(CutGraph, Vec<Point>)> {
     let mut primal = UnGraphMap::new();
     let qubits_map: IndexMap<_, _> = (0..height)
         .cartesian_product(0..width)
-        .filter(|&(y, x)| in_primal(x, y, config.qubit_at_origin))
+        .filter(|&(y, x)| in_primal(x as i32, y as i32, config.qubit_at_origin))
         .enumerate()
-        .map(|(i, (y, x))| ((x, y), i as u32))
+        .map(|(i, (y, x))| ((x as i32, y as i32), i as u32))
         .collect();
 
     qubits_map.iter().for_each(|(&(x, y), _)| {
-        if y == height - 1 {
+        if y == (height - 1) as i32 {
             return;
         }
         if x > 0 {
             primal.add_edge((x, y), (x - 1, y + 1), true);
         }
-        if x < width - 1 {
+        if x < (width - 1) as i32 {
             primal.add_edge((x, y), (x + 1, y + 1), true);
         }
     });
@@ -119,7 +126,10 @@ pub fn get_dual_boundary(graph: &CutGraph, grid_width: u32, grid_height: u32) ->
     let initial_boundaries = graph
         .nodes()
         .filter(|&node| {
-            node.0 == 0 || node.0 == grid_width - 1 || node.1 == 0 || node.1 == grid_height - 1
+            node.0 == 0
+                || node.0 == grid_width as i32 - 1
+                || node.1 == 0
+                || node.1 == grid_height as i32 - 1
         })
         .collect_vec();
 
@@ -158,7 +168,7 @@ fn remove_dangling_nodes(graph: &mut CutGraph) -> Vec<Point> {
     remove_nodes
 }
 
-fn in_primal(x: u32, y: u32, start_at_origin: bool) -> bool {
+fn in_primal(x: i32, y: i32, start_at_origin: bool) -> bool {
     if y & 1 == 0 {
         if start_at_origin {
             x & 1 == 0
