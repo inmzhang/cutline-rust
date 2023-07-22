@@ -137,7 +137,7 @@ fn search_pattern_rec(
     if n_unassigned == 0 {
         patterns.extend(search_pattern_rec(
             primal_graph,
-            base_pattern.clone(),
+            base_pattern,
             searched_nodes,
         ));
         return patterns;

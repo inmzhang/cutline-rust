@@ -1,8 +1,8 @@
 use crate::config::TopologyConfig;
 use anyhow::{bail, Ok, Result};
-use indexmap::IndexMap;
 use itertools::Itertools;
 use petgraph::{algo::connected_components, graphmap::UnGraphMap};
+use std::collections::HashMap;
 
 pub type CutGraph = UnGraphMap<(i32, i32), bool>;
 pub type Point = (i32, i32);
@@ -33,6 +33,33 @@ impl SearchGraph {
             dual_boundaries,
         })
     }
+
+    #[allow(unused)]
+    pub fn num_slash(&self) -> usize {
+        let primal = &self.primal;
+        let primal_width = self.config.grid_width as i32;
+        primal
+            .nodes()
+            .filter(|&n| {
+                (n.1 == 0 || n.0 == primal_width - 1)
+                    && primal.edge_weight(n, (n.0 - 1, n.1 + 1)).is_some()
+            })
+            .count()
+    }
+
+    #[allow(unused)]
+    pub fn num_back_slash(&self) -> usize {
+        let primal = &self.primal;
+        let primal_width = self.config.grid_width as i32;
+        let primal_height = self.config.grid_height as i32;
+        primal
+            .nodes()
+            .filter(|&n| {
+                (n.1 == primal_height - 1 || n.0 == primal_width - 1)
+                    && primal.edge_weight(n, (n.0 - 1, n.1 - 1)).is_some()
+            })
+            .count()
+    }
 }
 
 impl Default for SearchGraph {
@@ -54,7 +81,7 @@ fn create_primal(config: &TopologyConfig) -> Result<(CutGraph, Vec<Point>)> {
     let unused_qubits = &config.unused_qubits;
     let unused_couplers = &config.unused_couplers;
     let mut primal = UnGraphMap::new();
-    let qubits_map: IndexMap<_, _> = (0..height)
+    let qubits_map: HashMap<_, _> = (0..height)
         .cartesian_product(0..width)
         .filter(|&(y, x)| in_primal(x as i32, y as i32, config.qubit_at_origin))
         .enumerate()
@@ -232,5 +259,12 @@ mod tests {
         let dual_graph = &graph.dual;
         assert_eq!(dual_graph.node_count(), 66 - 1);
         assert_eq!(dual_graph.edge_count(), 110 - 4);
+    }
+
+    #[test]
+    fn num_slash() {
+        let graph = SearchGraph::default();
+        assert_eq!(graph.num_slash(), 10);
+        assert_eq!(graph.num_back_slash(), 10);
     }
 }

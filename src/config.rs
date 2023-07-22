@@ -47,6 +47,7 @@ pub struct Config {
 }
 
 impl Config {
+    #[allow(unused)]
     pub fn save_to_json(&self, path: &Path) -> Result<()> {
         // create file if not exist
         let file = File::create(path)?;
