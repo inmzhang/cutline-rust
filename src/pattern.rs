@@ -1,4 +1,4 @@
-use crate::graphmap::Point;
+use crate::graph::Point;
 use fixedbitset::FixedBitSet;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
@@ -14,6 +14,7 @@ impl Order {
         [Order::A, Order::B, Order::C, Order::D].into_iter()
     }
 
+    #[allow(unused)]
     pub fn as_str(&self) -> &'static str {
         match self {
             Order::A => "A",
@@ -36,8 +37,6 @@ impl From<String> for Order {
     }
 }
 
-pub trait Context {}
-
 pub trait Query {
     type Context;
     fn look_up(&self, n1: Point, n2: Point, context: Self::Context) -> Option<Order>;
@@ -46,24 +45,17 @@ pub trait Query {
 /// Exhaustive search pattern
 pub type VecPattern = Vec<Option<Order>>;
 
-#[derive(Debug, Clone, Copy)]
-pub struct VecContext {
-    width: u32,
-    n_edges: usize,
-}
-
 impl Query for VecPattern {
-    type Context = VecContext;
+    type Context = usize;
 
-    fn look_up(&self, n1: Point, n2: Point, context: VecContext) -> Option<Order> {
-        let index = get_edge_index(n1, n2, context.width);
-        debug_assert!(index < context.n_edges);
+    fn look_up(&self, n1: Point, n2: Point, context: usize) -> Option<Order> {
+        let index = get_edge_index(n1, n2, context);
         self[index]
     }
 }
 
-fn get_edge_index(n1: Point, n2: Point, width: u32) -> usize {
-    let index = (n1.1 + n2.1 - 1) / 2 * width as i32 + (n1.0 + n2.0 - 1) / 2;
+pub fn get_edge_index(n1: Point, n2: Point, edges_per_line: usize) -> usize {
+    let index = (n1.1 + n2.1 - 1) / 2 * edges_per_line as i32 + (n1.0 + n2.0 - 1) / 2;
     index as usize
 }
 
@@ -128,7 +120,7 @@ pub fn slash_index(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graphmap::SearchGraph;
+    use crate::graph::SearchGraph;
 
     macro_rules! trivial_pattern_test {
         ($graph:ident, $pattern:ident, $orders:expr) => {
@@ -184,5 +176,13 @@ mod tests {
         assert_eq!(pattern.look_up((10, 1), (11, 2), context), Some(Order::D));
         pattern.put(0);
         assert_eq!(pattern.look_up((10, 1), (11, 2), context), Some(Order::B));
+    }
+
+    #[test]
+    fn test_get_edge_index() {
+        let graph = SearchGraph::default();
+        let edges_per_line = graph.edges_per_line();
+        assert_eq!(get_edge_index((1, 0), (0, 1), edges_per_line), 0);
+        assert_eq!(get_edge_index((10, 9), (11, 10), edges_per_line), 109);
     }
 }

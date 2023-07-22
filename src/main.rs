@@ -1,15 +1,28 @@
 mod config;
-mod graphmap;
+mod graph;
+mod pattern;
+mod search_pattern;
 use lazy_static::lazy_static;
 
 lazy_static! {
-    static ref GRAPH: graphmap::SearchGraph = {
-        let mut config = config::TopologyConfig::default();
-        config.unused_qubits.extend([33, 34]);
-        graphmap::SearchGraph::from_config(config).unwrap()
+    static ref GRAPH: graph::SearchGraph = {
+        let topo = config::TopologyConfigBuilder::default()
+            .qubit_at_origin(true)
+            .grid_width(5)
+            .grid_height(4)
+            .unused_qubits(vec![])
+            .build()
+            .unwrap();
+        graph::SearchGraph::from_config(topo).unwrap()
     };
 }
 
 fn main() {
-    dbg!(GRAPH.primal.node_count());
+    let vec_patterns = search_pattern::search_vec_patterns(&GRAPH);
+    let bit_patterns = search_pattern::search_bit_patterns(&GRAPH);
+    println!(
+        "Found {} patterns in total, {} patterns for bit pattern",
+        vec_patterns.len(),
+        bit_patterns.count()
+    )
 }
