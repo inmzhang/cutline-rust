@@ -15,10 +15,7 @@ pub struct Cutline {
     pub unbalance: usize,
 }
 
-pub fn search_cutlines(
-    graph: &'static SearchGraph,
-    algorithm_config: &AlgorithmConfig,
-) -> Vec<Cutline> {
+pub fn search_cutlines(graph: &SearchGraph, algorithm_config: &AlgorithmConfig) -> Vec<Cutline> {
     let paths = search_paths(graph, algorithm_config);
     dbg!(paths.len());
     let unused_qubits = &graph.unused_qubits;
@@ -45,7 +42,7 @@ fn limit_unbalance(
         .collect()
 }
 
-fn search_paths(graph: & SearchGraph, algorithm_config: &AlgorithmConfig) -> Vec<Path> {
+fn search_paths(graph: &SearchGraph, algorithm_config: &AlgorithmConfig) -> Vec<Path> {
     let boundaries = graph.dual_boundaries.clone();
     boundaries
         .into_iter()
@@ -163,8 +160,7 @@ mod tests {
             // .unused_qubits(vec![21])
             .build()
             .unwrap();
-        let graph = Box::new(SearchGraph::from_config(topo).unwrap());
-        let static_ref: &'static SearchGraph = Box::leak(graph);
+        let graph = SearchGraph::from_config(topo).unwrap();
 
         let algo = AlgorithmConfigBuilder::default()
             .min_search_depth(5)
@@ -174,7 +170,7 @@ mod tests {
             .unwrap();
 
         // let paths = search_paths(static_ref, &algo);
-        let cutlines = search_cutlines(static_ref, &algo);
+        let cutlines = search_cutlines(&graph, &algo);
         // assert_eq!(paths.len(), 5);
         println!("{:?}", cutlines[0]);
         assert_eq!(cutlines.len(), 5);
