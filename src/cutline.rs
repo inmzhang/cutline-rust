@@ -45,7 +45,7 @@ fn limit_unbalance(
         .collect()
 }
 
-fn search_paths(graph: &'static SearchGraph, algorithm_config: &AlgorithmConfig) -> Vec<Path> {
+fn search_paths(graph: & SearchGraph, algorithm_config: &AlgorithmConfig) -> Vec<Path> {
     let boundaries = graph.dual_boundaries.clone();
     boundaries
         .into_iter()
@@ -68,12 +68,12 @@ fn search_paths(graph: &'static SearchGraph, algorithm_config: &AlgorithmConfig)
 
 /// Search all paths between the two nodes with dfs variant.
 fn search_paths_between(
-    graph: &'static SearchGraph,
+    graph: &SearchGraph,
     from: Point,
     to: Point,
     min_path_length: usize,
     max_path_length: usize,
-) -> impl Iterator<Item = Path> {
+) -> impl Iterator<Item = Path> + '_ {
     let boundaries = &graph.dual_boundaries;
     let graph = &graph.dual;
     // list of visited nodes
@@ -143,7 +143,7 @@ fn component_parity(path: &Path, qubit: Point) -> bool {
 }
 
 #[inline(always)]
-fn compute_depth(graph: &'static CutGraph, path: &IndexSet<Point>) -> usize {
+fn compute_depth(graph: &CutGraph, path: &IndexSet<Point>) -> usize {
     path.iter()
         .tuple_windows()
         .map(|(&n1, &n2)| graph.edge_weight(n1, n2).unwrap().to_owned() as usize)
