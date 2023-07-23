@@ -27,11 +27,13 @@ impl Default for TopologyConfig {
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Builder)]
 pub struct AlgorithmConfig {
     #[builder(default = "20")]
-    pub circuit_depth: u32,
+    pub circuit_depth: usize,
+    #[builder(default = "2")]
+    pub min_search_depth: usize,
     #[builder(default = "10")]
-    pub max_search_depth: u32,
+    pub max_search_depth: usize,
     #[builder(default = "11")]
-    pub max_unbalance: u32,
+    pub max_unbalance: usize,
 }
 
 impl Default for AlgorithmConfig {
