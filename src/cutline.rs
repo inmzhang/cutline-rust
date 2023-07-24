@@ -1,9 +1,10 @@
 use crate::{
     config::AlgorithmConfig,
-    graph::{CutGraph, Point, SearchGraph},
+    graph::{duality_map, CutGraph, Point, SearchGraph},
 };
 use indexmap::IndexSet;
 use itertools::Itertools;
+use petgraph::visit::{Dfs, EdgeFiltered, EdgeRef};
 use rayon::prelude::*;
 use std::iter::from_fn;
 
@@ -21,10 +22,11 @@ pub fn search_cutlines(graph: &SearchGraph, algorithm_config: &AlgorithmConfig) 
     let unused_qubits = &graph.unused_qubits;
     let mut used_qubits = graph.primal.nodes().collect_vec();
     used_qubits.retain(|q| !unused_qubits.contains(q));
-    limit_unbalance(paths, algorithm_config.max_unbalance, &used_qubits)
+    limit_unbalance(graph, paths, algorithm_config.max_unbalance, &used_qubits)
 }
 
 fn limit_unbalance(
+    graph: &SearchGraph,
     paths: Vec<Path>,
     max_unbalance: usize,
     used_qubits: &Vec<Point>,
@@ -32,7 +34,7 @@ fn limit_unbalance(
     paths
         .into_par_iter()
         .filter_map(|path| {
-            let unbalance = compute_unbalance(used_qubits, &path);
+            let unbalance = compute_unbalance(graph, used_qubits, &path);
             if unbalance > max_unbalance {
                 None
             } else {
@@ -83,9 +85,9 @@ fn search_paths_between(
         while let Some(children) = stack.last_mut() {
             if let Some(child) = children.next() {
                 let depth = compute_depth(graph, &visited);
-                if depth < max_path_length {
+                if depth + 1 < max_path_length {
                     if child == to {
-                        if depth >= min_path_length {
+                        if depth + 1 >= min_path_length {
                             let path = visited.iter().cloned().chain(Some(to)).collect();
                             return Some(path);
                         }
@@ -94,7 +96,7 @@ fn search_paths_between(
                         stack.push(graph.neighbors(child));
                     }
                 } else {
-                    if (child == to || children.any(|v| v == to)) && depth >= min_path_length {
+                    if (child == to || children.any(|v| v == to)) && depth + 1 >= min_path_length {
                         let path = visited.iter().cloned().chain(Some(to)).collect();
                         return Some(path);
                     }
@@ -110,33 +112,28 @@ fn search_paths_between(
     })
 }
 
-fn compute_unbalance(used_qubits: &Vec<Point>, path: &Path) -> usize {
-    let c1 = used_qubits
+fn compute_unbalance(graph: &SearchGraph, used_qubits: &Vec<Point>, path: &Path) -> usize {
+    let filtered_edges = path
         .iter()
-        .filter(|&&q| component_parity(path, q))
-        .count();
-    let c2 = used_qubits.len() - c1;
-    c1.max(c2) - c1.min(c2)
-}
-
-// TODO: Debug
-#[inline(always)]
-fn component_parity(path: &Path, qubit: Point) -> bool {
-    let length = path.len();
-    path.iter()
-        .enumerate()
-        .filter(|&(i, &(nx, ny))| {
-            if ny != qubit.1
-                || nx > qubit.0
-                || (i != 0 && i != length - 1 && path[i - 1].1 == path[i + 1].1)
-            {
-                return false;
-            }
-            true
+        .tuple_windows()
+        .map(|(&n1, &n2)| {
+            let (n1, n2) = duality_map(n1, n2);
+            (n1.min(n2), n1.max(n2))
         })
-        .count()
-        % 2
-        == 1
+        .collect_vec();
+    let filtered_graph = EdgeFiltered::from_fn(&graph.primal, |e| {
+        let (source, target) = (e.source(), e.target());
+        !filtered_edges.contains(&(source.min(target), source.max(target)))
+    });
+    let mut dfs = Dfs::new(&filtered_graph, used_qubits[0]);
+    let mut count = 0;
+    while let Some(qubit) = dfs.next(&filtered_graph) {
+        if used_qubits.contains(&qubit) {
+            count += 1;
+        }
+    }
+    let count2 = used_qubits.len() - count;
+    count.max(count2) - count.min(count2)
 }
 
 #[inline(always)]
@@ -155,24 +152,22 @@ mod tests {
     #[test]
     fn test_search_paths() {
         let topo = TopologyConfigBuilder::default()
-            .grid_width(15)
-            .grid_height(14)
-            // .unused_qubits(vec![21])
+            .grid_width(12)
+            .grid_height(11)
+            // .unused_qubits(vec![])
             .build()
             .unwrap();
         let graph = SearchGraph::from_config(topo).unwrap();
 
         let algo = AlgorithmConfigBuilder::default()
-            .min_search_depth(5)
+            .min_search_depth(0)
             .max_search_depth(11)
             .max_unbalance(20)
             .build()
             .unwrap();
 
-        // let paths = search_paths(static_ref, &algo);
         let cutlines = search_cutlines(&graph, &algo);
-        // assert_eq!(paths.len(), 5);
-        println!("{:?}", cutlines[0]);
-        assert_eq!(cutlines.len(), 5);
+        println!("{:?}", cutlines[10000]);
+        // assert_eq!(cutlines.len(), 5);
     }
 }

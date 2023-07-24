@@ -73,6 +73,7 @@ impl Default for SearchGraph {
     }
 }
 
+#[inline(always)]
 pub fn duality_map(p1: Point, p2: Point) -> (Point, Point) {
     let dual_p1 = (p1.0, p2.1);
     let dual_p2 = (p2.0, p1.1);
