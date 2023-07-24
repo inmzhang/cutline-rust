@@ -1,7 +1,7 @@
 use crate::config::AlgorithmConfig;
 use crate::cutline::Path;
 use crate::graph::{Point, SearchGraph};
-use crate::pattern::{Order, Pattern};
+use crate::pattern::{Order, Pattern, Context};
 use itertools::Itertools;
 use rayon::prelude::*;
 use std::collections::HashMap;
@@ -30,11 +30,12 @@ fn calculate_min_cost<P>(
 ) -> usize 
 where
     P: Pattern,
-{
+{   
+    let context = Context::from_graph(graph);
     let order_map = graph.dual.all_edges().map(|(n1, n2, &weight)| {
         let (n1, n2) = (n1.min(n2), n1.max(n2));
-        ((n1, n2), pattern.look_up(n1, n2, context))
-    });
+        ((n1, n2), pattern.look_up(n1, n2, &context))
+    }).collect();
     let mut order_cache = HashMap::new();
     paths
         .iter()

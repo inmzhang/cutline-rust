@@ -1,6 +1,6 @@
 use crate::graph::Point;
 use fixedbitset::FixedBitSet;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash, Serialize, Deserialize)]
 pub enum Order {
@@ -29,12 +29,24 @@ impl From<String> for Order {
 }
 
 #[derive(Debug, Clone, Copy)]
-struct Context {
+pub struct Context {
     edges_per_line: usize,
     qubit_at_origin: bool,
     width: u32,
     height: u32,
     n_slash: usize,
+}
+
+impl Context {
+    pub fn from_graph(graph: &crate::graph::SearchGraph) -> Self {
+        Context {
+            edges_per_line: graph.edges_per_line(),
+            qubit_at_origin: graph.config.qubit_at_origin,
+            width: graph.config.grid_width,
+            height: graph.config.grid_height,
+            n_slash: graph.num_slash(),
+        }
+    }
 }
 
 pub trait Pattern {
@@ -45,7 +57,6 @@ pub trait Pattern {
 pub type VecPattern = Vec<Option<Order>>;
 
 impl Pattern for VecPattern {
-
     fn look_up(&self, n1: Point, n2: Point, context: &Context) -> Option<Order> {
         let index = get_edge_index(n1, n2, context.edges_per_line);
         self[index]
