@@ -1,8 +1,9 @@
-use serde::{Deserialize, Serialize};
-use std::path::Path;
-use std::fs::File;
+use crate::pattern::Order;
 use anyhow::Result;
 use derive_builder::Builder;
+use serde::{Deserialize, Serialize};
+use std::fs::File;
+use std::path::Path;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Builder, Clone)]
 pub struct TopologyConfig {
@@ -34,6 +35,10 @@ pub struct AlgorithmConfig {
     pub max_search_depth: usize,
     #[builder(default = "11")]
     pub max_unbalance: usize,
+    #[builder(
+        default = "vec![Order::A, Order::B, Order::C, Order::D, Order::C, Order::D, Order::A, Order::B]"
+    )]
+    pub ordering: Vec<Order>,
 }
 
 impl Default for AlgorithmConfig {

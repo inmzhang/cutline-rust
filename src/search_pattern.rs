@@ -1,6 +1,6 @@
 use crate::{
     graph::{Point, SearchGraph},
-    pattern::{get_edge_index, slash_index, BitPattern, Order, Query, VecPattern},
+    pattern::{get_edge_index, slash_index, BitPattern, Order, Pattern, VecPattern},
 };
 use itertools::Itertools;
 use smallvec::SmallVec;

@@ -1,7 +1,8 @@
 use crate::graph::Point;
 use fixedbitset::FixedBitSet;
+use serde::{Serialize, Deserialize};
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash, Serialize, Deserialize)]
 pub enum Order {
     A,
     B,
@@ -12,16 +13,6 @@ pub enum Order {
 impl Order {
     pub fn all_possibles() -> impl Iterator<Item = Order> {
         [Order::A, Order::B, Order::C, Order::D].into_iter()
-    }
-
-    #[allow(unused)]
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Order::A => "A",
-            Order::B => "B",
-            Order::C => "C",
-            Order::D => "D",
-        }
     }
 }
 
@@ -37,19 +28,26 @@ impl From<String> for Order {
     }
 }
 
-pub trait Query {
-    type Context;
-    fn look_up(&self, n1: Point, n2: Point, context: Self::Context) -> Option<Order>;
+#[derive(Debug, Clone, Copy)]
+struct Context {
+    edges_per_line: usize,
+    qubit_at_origin: bool,
+    width: u32,
+    height: u32,
+    n_slash: usize,
+}
+
+pub trait Pattern {
+    fn look_up(&self, n1: Point, n2: Point, context: &Context) -> Option<Order>;
 }
 
 /// Exhaustive search pattern
 pub type VecPattern = Vec<Option<Order>>;
 
-impl Query for VecPattern {
-    type Context = usize;
+impl Pattern for VecPattern {
 
-    fn look_up(&self, n1: Point, n2: Point, context: usize) -> Option<Order> {
-        let index = get_edge_index(n1, n2, context);
+    fn look_up(&self, n1: Point, n2: Point, context: &Context) -> Option<Order> {
+        let index = get_edge_index(n1, n2, context.edges_per_line);
         self[index]
     }
 }
@@ -61,17 +59,8 @@ pub fn get_edge_index(n1: Point, n2: Point, edges_per_line: usize) -> usize {
 
 pub type BitPattern = FixedBitSet;
 
-#[derive(Debug, Clone, Copy)]
-pub struct BitContext {
-    qubit_at_origin: bool,
-    width: u32,
-    height: u32,
-    n_slash: usize,
-}
-
-impl Query for BitPattern {
-    type Context = BitContext;
-    fn look_up(&self, n1: Point, n2: Point, context: BitContext) -> Option<Order> {
+impl Pattern for BitPattern {
+    fn look_up(&self, n1: Point, n2: Point, context: &Context) -> Option<Order> {
         let (n1, n2) = (n1.min(n2), n1.max(n2));
         let ab_flip_cd = self[0];
         let is_slash = n1.1 > n2.1;
@@ -124,7 +113,8 @@ mod tests {
 
     macro_rules! trivial_pattern_test {
         ($graph:ident, $pattern:ident, $orders:expr) => {
-            let context = BitContext {
+            let context = Context {
+                edges_per_line: $graph.edges_per_line(),
                 qubit_at_origin: false,
                 width: $graph.config.grid_width,
                 height: $graph.config.grid_height,
@@ -145,7 +135,7 @@ mod tests {
                     .zip($orders.chars().map(|c| Order::from(c.to_string())))
                     .filter(|&(n2, _)| $graph.primal.contains_edge(n, n2))
                     .for_each(|(n2, order)| {
-                        assert_eq!($pattern.look_up(n, n2, context.clone()), Some(order));
+                        assert_eq!($pattern.look_up(n, n2, &context), Some(order));
                     })
                 });
         };
@@ -165,7 +155,8 @@ mod tests {
         pattern.insert_range(..);
         trivial_pattern_test!(graph, pattern, "DCBA");
 
-        let context = BitContext {
+        let context = Context {
+            edges_per_line: graph.edges_per_line(),
             qubit_at_origin: false,
             width: graph.config.grid_width,
             height: graph.config.grid_height,
@@ -173,9 +164,9 @@ mod tests {
         };
         let mut pattern = BitPattern::with_capacity_and_blocks(21, vec![0]);
         pattern.put(20);
-        assert_eq!(pattern.look_up((10, 1), (11, 2), context), Some(Order::D));
+        assert_eq!(pattern.look_up((10, 1), (11, 2), &context), Some(Order::D));
         pattern.put(0);
-        assert_eq!(pattern.look_up((10, 1), (11, 2), context), Some(Order::B));
+        assert_eq!(pattern.look_up((10, 1), (11, 2), &context), Some(Order::B));
     }
 
     #[test]
