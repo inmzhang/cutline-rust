@@ -6,6 +6,7 @@ use indexmap::IndexSet;
 use itertools::Itertools;
 use petgraph::visit::{Dfs, EdgeFiltered, EdgeRef};
 use rayon::prelude::*;
+use std::collections::HashMap;
 use std::iter::from_fn;
 
 type Path = Vec<Point>;
@@ -18,11 +19,32 @@ pub struct Cutline {
 
 pub fn search_cutlines(graph: &SearchGraph, algorithm_config: &AlgorithmConfig) -> Vec<Cutline> {
     let paths = search_paths(graph, algorithm_config);
+    let paths = dedup_virtual_dispatch(graph, paths);
     dbg!(paths.len());
     let unused_qubits = &graph.unused_qubits;
     let mut used_qubits = graph.primal.nodes().collect_vec();
     used_qubits.retain(|q| !unused_qubits.contains(q));
     limit_unbalance(graph, paths, algorithm_config.max_unbalance, &used_qubits)
+}
+
+fn dedup_virtual_dispatch(graph: &SearchGraph, paths: Vec<Path>) -> Vec<Path> {
+    let dual = &graph.dual;
+    let mut unique_paths = HashMap::with_capacity(paths.len());
+    for path in paths {
+        let real_path = path
+            .iter()
+            .tuple_windows()
+            .filter_map(|(&n1, &n2)| {
+                if dual.edge_weight(n1, n2).unwrap().to_owned() {
+                    Some(n1)
+                } else {
+                    None
+                }
+            })
+            .collect_vec();
+        unique_paths.insert(real_path, path);
+    }
+    unique_paths.into_values().collect()
 }
 
 fn limit_unbalance(
@@ -154,13 +176,13 @@ mod tests {
         let topo = TopologyConfigBuilder::default()
             .grid_width(12)
             .grid_height(11)
-            // .unused_qubits(vec![])
+            .unused_qubits(vec![21])
             .build()
             .unwrap();
         let graph = SearchGraph::from_config(topo).unwrap();
 
         let algo = AlgorithmConfigBuilder::default()
-            .min_search_depth(0)
+            .min_search_depth(6)
             .max_search_depth(11)
             .max_unbalance(20)
             .build()
@@ -168,6 +190,6 @@ mod tests {
 
         let cutlines = search_cutlines(&graph, &algo);
         println!("{:?}", cutlines[10000]);
-        // assert_eq!(cutlines.len(), 5);
+        assert_eq!(cutlines.len(), 5);
     }
 }
