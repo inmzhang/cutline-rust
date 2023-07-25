@@ -68,7 +68,7 @@ fn search_paths(graph: &SearchGraph, algorithm_config: &AlgorithmConfig) -> Vec<
     let boundaries = graph.dual_boundaries.clone();
     boundaries
         .into_iter()
-        .permutations(2)
+        .combinations(2)
         .map(|v| (v[0], v[1]))
         .collect_vec()
         .into_par_iter()
@@ -174,7 +174,7 @@ fn compute_depth(graph: &CutGraph, path: &IndexSet<Point>) -> usize {
 //         let topo = TopologyConfigBuilder::default()
 //             .grid_width(12)
 //             .grid_height(11)
-//             .unused_qubits(vec![21])
+//             .unused_qubits(vec![])
 //             .build()
 //             .unwrap();
 //         let graph = SearchGraph::from_config(topo).unwrap();

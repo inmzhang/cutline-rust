@@ -47,6 +47,17 @@ impl Default for AlgorithmConfig {
     }
 }
 
+impl AlgorithmConfig {
+    pub fn full_ordering(&self) -> Vec<Order> {
+        self.ordering
+            .iter()
+            .cycle()
+            .take(self.circuit_depth)
+            .cloned()
+            .collect()
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub struct Config {
     pub topology: TopologyConfig,
@@ -66,6 +77,7 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use itertools::Itertools;
     use tempfile::tempdir;
 
     #[test]
@@ -79,5 +91,17 @@ mod tests {
         let config2: Config = serde_json::from_reader(File::open(path.as_path())?)?;
         assert_eq!(config, config2);
         Ok(())
+    }
+
+    #[test]
+    fn test_full_ordering() {
+        let config = AlgorithmConfig::default();
+        assert_eq!(
+            config.full_ordering(),
+            "ABCDCDABABCDCDABABCD"
+                .chars()
+                .map(|c| Order::from(c.to_string()))
+                .collect_vec()
+        )
     }
 }

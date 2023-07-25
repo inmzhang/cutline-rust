@@ -1,4 +1,6 @@
-use crate::graph::Point;
+use std::collections::HashMap;
+
+use crate::graph::{Point, SearchGraph};
 use fixedbitset::FixedBitSet;
 use serde::{Deserialize, Serialize};
 
@@ -51,6 +53,21 @@ impl Context {
 
 pub trait Pattern {
     fn look_up(&self, n1: Point, n2: Point, context: &Context) -> Option<Order>;
+
+    fn order_map(&self, graph: &SearchGraph) -> HashMap<(Point, Point), Option<Order>> {
+        let context = Context::from_graph(graph);
+        let primal = &graph.primal;
+        primal.all_edges()
+            .map(|(n1, n2, _)| {
+                let edge = (n1.min(n2), n1.max(n2));
+                if !primal.edge_weight(n1, n2).unwrap().to_owned() {
+                    (edge, None)
+                } else {
+                    (edge, self.look_up(n1, n2, &context))
+                }
+            })
+            .collect()
+    }
 }
 
 /// Exhaustive search pattern

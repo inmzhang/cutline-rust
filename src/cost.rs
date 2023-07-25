@@ -1,62 +1,192 @@
 use crate::config::AlgorithmConfig;
-use crate::cutline::Path;
-use crate::graph::{Point, SearchGraph};
-use crate::pattern::{Order, Pattern, Context};
+use crate::cutline::Cutline;
+use crate::graph::{duality_map, Point, SearchGraph};
+use crate::pattern::{Order, Pattern};
 use itertools::Itertools;
 use rayon::prelude::*;
-use std::collections::HashMap;
+use smallvec::SmallVec;
+use std::collections::{HashMap, HashSet};
+
+const NEIGHBORS: &[(i32, i32)] = &[(1, 1), (1, -1), (-1, 1), (-1, -1)];
 
 pub fn max_min_cost<P>(
     graph: &SearchGraph,
     patterns: Vec<P>,
-    paths: Vec<Path>,
+    cutlines: Vec<Cutline>,
     algorithm_config: &AlgorithmConfig,
-) -> usize
+) -> Cutline
 where
     P: Pattern + Send,
 {
+    let ordering = algorithm_config.full_ordering();
     patterns
         .into_par_iter()
-        .map(|pattern| calculate_min_cost(graph, pattern, &paths, algorithm_config))
-        .max()
+        .map(|pattern| calculate_min_cost(graph, pattern, &cutlines, &ordering))
+        .max_by(|&(_, c1), &(_, c2)| c1.partial_cmp(&c2).unwrap())
+        .map(|(i, _)| cutlines[i].clone())
         .unwrap()
 }
 
 fn calculate_min_cost<P>(
     graph: &SearchGraph,
     pattern: P,
-    paths: &[Path],
-    algorithm_config: &AlgorithmConfig,
-) -> usize 
+    cutlines: &[Cutline],
+    ordering: &[Order],
+) -> (usize, f64)
 where
     P: Pattern,
-{   
-    let context = Context::from_graph(graph);
-    let order_map = graph.dual.all_edges().map(|(n1, n2, &weight)| {
-        let (n1, n2) = (n1.min(n2), n1.max(n2));
-        ((n1, n2), pattern.look_up(n1, n2, &context))
-    }).collect();
-    let mut order_cache = HashMap::new();
-    paths
+{
+    let order_map = pattern.order_map(graph);
+    cutlines
         .iter()
-        .map(|path| cost_for_path(&order_map, path, algorithm_config))
-        .min()
+        .map(|cutline| cost_for_cutline(&order_map, cutline, ordering))
+        .enumerate()
+        .min_by(|&(_, c1), &(_, c2)| c1.partial_cmp(&c2).unwrap())
         .unwrap()
 }
 
-fn cost_for_path(
-    order_map: &HashMap<(Point, Point), Order>,
-    path: &Path,
-    algorithm_config: &AlgorithmConfig,
-) -> usize {
-    let circuit_depth = algorithm_config.circuit_depth;
-    let ordering_primitive = &algorithm_config.ordering;
-    let ordering = ordering_primitive
+fn cost_for_cutline(
+    order_map: &HashMap<(Point, Point), Option<Order>>,
+    cutline: &Cutline,
+    ordering: &[Order],
+) -> f64 {
+    let path = &cutline.path;
+    let cut_edges = path
         .iter()
-        .cycle()
-        .take(circuit_depth)
-        .cloned()
+        .tuple_windows()
+        .map(|(&n1, &n2)| {
+            let (n1, n2) = duality_map(n1, n2);
+            (n1.min(n2), n1.max(n2))
+        })
         .collect_vec();
-    // start and end elimination
-    todo!()
+    // map order to cutline edges
+    let order_to_edges: HashMap<Order, Vec<(Point, Point)>> = Order::all_possibles()
+        .map(|order| {
+            let edges = get_edges_for_order(order_map, &cut_edges, order);
+            (order, edges)
+        })
+        .collect();
+    // total two qubits gates on the cut
+    let order_counts = ordering.iter().copied().counts();
+    let length: usize = order_to_edges
+        .iter()
+        .map(|(order, edges)| {
+            let count = order_counts[order];
+            count * edges.len()
+        })
+        .sum();
+    // each gates can only be used in one optimization
+    let mut used_gates: HashSet<(usize, (Point, Point))> = HashSet::new();
+    // start and end elision
+    let start_end_elision: usize = [
+        (0, ordering.first().unwrap()),
+        (ordering.len() - 1, ordering.last().unwrap()),
+    ]
+    .into_iter()
+    .map(|(depth, order)| {
+        let start_end_gates = &order_to_edges[order];
+        used_gates.extend(start_end_gates.clone().into_iter().map(|o| (depth, o)));
+        start_end_gates.len()
+    })
+    .sum();
+    // DCD fusion, only consider 3 gates fusion though
+    // higher order fusion may exsit
+    let mut n_dcd: usize = 0;
+    let potential_dcd = ordering
+        .windows(3)
+        .enumerate()
+        .filter(|&(_, window)| window[0] == window[2]);
+    for (i, dcd) in potential_dcd {
+        let d_gates = &order_to_edges[&dcd[0]];
+        for &d_gate in d_gates {
+            if used_gates.contains(&(i, d_gate)) || used_gates.contains(&(i + 2, d_gate)) {
+                continue;
+            }
+            let (n1, n2) = d_gate;
+            let mut n1_orders = all_order_for_point(order_map, n1);
+            let mut n2_orders = all_order_for_point(order_map, n2);
+            if !n1_orders.iter().any(|(order, _)| *order == dcd[1]) {
+                std::mem::swap(&mut n1_orders, &mut n2_orders);
+            }
+            if let Some((_, edge)) = n1_orders.into_iter().find(|(order, _)| *order == dcd[1]) {
+                if n2_orders.iter().any(|(order, _)| *order == dcd[1]) {
+                    continue;
+                }
+                if cut_edges.contains(&edge) {
+                    n_dcd += 1;
+                    used_gates.insert((i + 1, edge));
+                }
+                used_gates.insert((i, d_gate));
+                used_gates.insert((i + 2, d_gate));
+                n_dcd += 1;
+            } else {
+                continue;
+            }
+        }
+    }
+    // wedge fusion
+    let mut n_wedge: usize = 0;
+    let potential_wedge = ordering.windows(2).enumerate();
+    for (i, wedge) in potential_wedge {
+        let (order1, order2) = (wedge[0], wedge[1]);
+        let order1_edges = &order_to_edges[&order1];
+        let order2_edges = &order_to_edges[&order2];
+        for &edge1 in order1_edges {
+            if used_gates.contains(&(i, edge1)) {
+                continue;
+            }
+            let wedges = order2_edges
+                .iter()
+                .filter(|&e| e.0 == edge1.0 || e.0 == edge1.1 || e.1 == edge1.0 || e.1 == edge1.1);
+            for &edge2 in wedges {
+                if used_gates.contains(&(i + 1, edge2)) {
+                    continue;
+                }
+                used_gates.insert((i, edge1));
+                used_gates.insert((i + 1, edge2));
+                n_wedge += 1;
+                break;
+            }
+        }
+    }
+
+    let unbalance = cutline.unbalance as f64;
+    (2f64.powf(unbalance / 2f64) + 2f64.powf(-unbalance / 2f64))
+        * (2 * length - start_end_elision - 2 * n_dcd - 2 * n_wedge) as f64
+}
+
+fn get_edges_for_order(
+    order_map: &HashMap<(Point, Point), Option<Order>>,
+    edges: &[(Point, Point)],
+    order: Order,
+) -> Vec<(Point, Point)> {
+    edges
+        .iter()
+        .filter(|&edge| {
+            if let Some(edge_order) = order_map[edge] {
+                edge_order == order
+            } else {
+                false
+            }
+        })
+        .copied()
+        .collect_vec()
+}
+
+fn all_order_for_point(
+    order_map: &HashMap<(Point, Point), Option<Order>>,
+    point: Point,
+) -> SmallVec<[(Order, (Point, Point)); 4]> {
+    NEIGHBORS
+        .iter()
+        .filter_map(|&offset| {
+            let neighbor = (point.0 + offset.0, point.1 + offset.1);
+            let edge = (neighbor.min(point), neighbor.max(point));
+            order_map
+                .get(&edge)
+                .copied()
+                .flatten()
+                .map(|order| (order, edge))
+        })
+        .collect()
 }

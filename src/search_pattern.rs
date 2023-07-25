@@ -1,6 +1,6 @@
 use crate::{
     graph::{Point, SearchGraph},
-    pattern::{get_edge_index, slash_index, BitPattern, Order, Pattern, VecPattern},
+    pattern::{get_edge_index, slash_index, BitPattern, Order, Pattern, VecPattern, Context},
 };
 use itertools::Itertools;
 use smallvec::SmallVec;
@@ -105,14 +105,14 @@ fn unassigned_order_and_neighbors(
     base_pattern: &VecPattern,
 ) -> (SmallVec<[Order; 4]>, SmallVec<[Point; 4]>) {
     let primal = &graph.primal;
-    let edges_per_line = graph.edges_per_line();
     let mut assigned_order = SmallVec::<[Order; 4]>::with_capacity(4);
     let mut unassigned_neighbors = SmallVec::<[Point; 4]>::with_capacity(4);
+    let context = Context::from_graph(graph);
     for neighbor in primal.neighbors(node) {
         if !primal.edge_weight(node, neighbor).unwrap() {
             continue;
         }
-        if let Some(order) = base_pattern.look_up(node, neighbor, edges_per_line) {
+        if let Some(order) = base_pattern.look_up(node, neighbor, &context) {
             assigned_order.push(order)
         } else {
             unassigned_neighbors.push(neighbor);
