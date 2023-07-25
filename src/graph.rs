@@ -23,8 +23,14 @@ impl SearchGraph {
         let width = config.grid_width;
         let height = config.grid_height;
         let mut dual_boundaries = get_dual_boundary(&dual, width, height);
-        let removed_nodes = remove_dangling_nodes(&mut dual);
-        dual_boundaries.retain(|n| !removed_nodes.contains(n));
+        let dangling_nodes = dangling_nodes(&dual);
+        dangling_nodes
+            .iter()
+            .filter(|&n| dual_boundaries.contains(n))
+            .for_each(|n| {
+                dual.remove_node(*n);
+            });
+        dual_boundaries.retain(|n| !dangling_nodes.contains(n));
         Ok(Self {
             config,
             primal,
@@ -191,13 +197,10 @@ fn try_set_boundary(point: Point, graph: &CutGraph, current_boundaries: &mut Vec
     }
 }
 
-fn remove_dangling_nodes(graph: &mut CutGraph) -> Vec<Point> {
-    let mut remove_nodes = graph.nodes().collect_vec();
-    remove_nodes.retain(|&n| graph.edges(n).all(|(_, _, &used)| !used));
-    remove_nodes.iter().for_each(|&n| {
-        graph.remove_node(n);
-    });
-    remove_nodes
+fn dangling_nodes(graph: &CutGraph) -> Vec<Point> {
+    let mut dangling_nodes = graph.nodes().collect_vec();
+    dangling_nodes.retain(|&n| graph.edges(n).all(|(_, _, &used)| !used));
+    dangling_nodes
 }
 
 fn in_primal(x: i32, y: i32, start_at_origin: bool) -> bool {
@@ -262,8 +265,11 @@ mod tests {
         config.unused_qubits.extend([33, 34]);
         let graph = SearchGraph::from_config(config).unwrap();
         let dual_graph = &graph.dual;
-        assert_eq!(dual_graph.node_count(), 66 - 1);
-        assert_eq!(dual_graph.edge_count(), 110 - 4);
+        assert_eq!(dual_graph.node_count(), 66);
+        assert_eq!(
+            dual_graph.all_edges().filter(|(_, _, e)| **e).count(),
+            110 - 8
+        );
     }
 
     #[test]
