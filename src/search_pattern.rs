@@ -42,6 +42,7 @@ fn dead_slash_indices(graph: &SearchGraph) -> Vec<usize> {
         .collect()
 }
 
+#[allow(unused)]
 pub fn search_vec_patterns(graph: &SearchGraph) -> Vec<VecPattern> {
     let n_edges = graph.primal.edge_count();
     search_vec_patterns_rec(graph, vec![None; n_edges], HashSet::new())

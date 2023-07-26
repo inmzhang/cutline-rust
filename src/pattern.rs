@@ -1,4 +1,5 @@
-use std::collections::HashMap;
+// use std::collections::HashMap;
+use fxhash::FxHashMap as HashMap;
 
 use crate::graph::{Point, SearchGraph};
 use fixedbitset::FixedBitSet;

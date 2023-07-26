@@ -17,10 +17,10 @@ pub struct Cutline {
 
 pub fn search_cutlines(graph: &SearchGraph, algorithm_config: &AlgorithmConfig) -> Vec<Cutline> {
     let paths = search_paths(graph, algorithm_config);
-    dbg!(paths.len());
+    println!("Found {} paths in total", paths.len());
     let paths = dedup_virtual_dispatch(graph, paths);
     debug_assert!(paths.iter().unique().count() == paths.len());
-    dbg!(paths.len());
+    println!("Filter virtual path and have {} paths left", paths.len());
     let unused_qubits = &graph.unused_qubits;
     let mut used_qubits = graph.primal.nodes().collect_vec();
     used_qubits.retain(|q| !unused_qubits.contains(q));

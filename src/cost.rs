@@ -5,7 +5,8 @@ use crate::pattern::{Order, Pattern};
 use itertools::Itertools;
 use rayon::prelude::*;
 use smallvec::SmallVec;
-use std::collections::{HashMap, HashSet};
+use fxhash::FxHashMap as HashMap;
+use fxhash::FxHashSet as HashSet;
 
 const NEIGHBORS: &[(i32, i32)] = &[(1, 1), (1, -1), (-1, 1), (-1, -1)];
 
@@ -19,9 +20,12 @@ where
     P: Pattern + Send,
 {
     let ordering = algorithm_config.full_ordering();
+    let mut order_counts = HashMap::default();
+    ordering.iter().copied().for_each(|item| *order_counts.entry(item).or_default() += 1);
     patterns
+        // .into_iter()
         .into_par_iter()
-        .map(|pattern| calculate_min_cost(graph, pattern, &cutlines, &ordering))
+        .map(|pattern| calculate_min_cost(graph, pattern, &cutlines, &ordering, &order_counts))
         .max_by(|&(_, c1), &(_, c2)| c1.partial_cmp(&c2).unwrap())
         .map(|(i, _)| cutlines[i].clone())
         .unwrap()
@@ -32,14 +36,20 @@ fn calculate_min_cost<P>(
     pattern: P,
     cutlines: &[Cutline],
     ordering: &[Order],
+    order_counts: &HashMap<Order, usize>,
 ) -> (usize, f64)
 where
     P: Pattern,
 {
     let order_map = pattern.order_map(graph);
+    let point_order_map: HashMap<_, _> = graph
+        .primal
+        .nodes()
+        .map(|n| (n, all_order_for_point(&order_map, n)))
+        .collect();
     cutlines
         .iter()
-        .map(|cutline| cost_for_cutline(&order_map, cutline, ordering))
+        .map(|cutline| cost_for_cutline(&order_map, &point_order_map, cutline, ordering, order_counts))
         .enumerate()
         .min_by(|&(_, c1), &(_, c2)| c1.partial_cmp(&c2).unwrap())
         .unwrap()
@@ -47,8 +57,10 @@ where
 
 fn cost_for_cutline(
     order_map: &HashMap<(Point, Point), Option<Order>>,
+    point_order_map: &HashMap<Point, SmallVec<[(Order, (Point, Point)); 4]>>,
     cutline: &Cutline,
     ordering: &[Order],
+    order_counts: &HashMap<Order, usize>,
 ) -> f64 {
     let path = &cutline.path;
     let cut_edges = path
@@ -67,7 +79,6 @@ fn cost_for_cutline(
         })
         .collect();
     // total two qubits gates on the cut
-    let order_counts = ordering.iter().copied().counts();
     let length: usize = order_to_edges
         .iter()
         .map(|(order, edges)| {
@@ -76,7 +87,7 @@ fn cost_for_cutline(
         })
         .sum();
     // each gates can only be used in one optimization
-    let mut used_gates: HashSet<(usize, (Point, Point))> = HashSet::new();
+    let mut used_gates: HashSet<(usize, (Point, Point))> = HashSet::default();
     // start and end elision
     let start_end_elision: usize = [
         (0, ordering.first().unwrap()),
@@ -103,8 +114,8 @@ fn cost_for_cutline(
                 continue;
             }
             let (n1, n2) = d_gate;
-            let mut n1_orders = all_order_for_point(order_map, n1);
-            let mut n2_orders = all_order_for_point(order_map, n2);
+            let mut n1_orders = &point_order_map[&n1];
+            let mut n2_orders = &point_order_map[&n2];
             if !n1_orders.iter().any(|(order, _)| *order == dcd[1]) {
                 std::mem::swap(&mut n1_orders, &mut n2_orders);
             }
@@ -112,9 +123,9 @@ fn cost_for_cutline(
                 if n2_orders.iter().any(|(order, _)| *order == dcd[1]) {
                     continue;
                 }
-                if cut_edges.contains(&edge) {
+                if cut_edges.contains(edge) {
                     n_dcd += 1;
-                    used_gates.insert((i + 1, edge));
+                    used_gates.insert((i + 1, *edge));
                 }
                 used_gates.insert((i, d_gate));
                 used_gates.insert((i + 2, d_gate));
