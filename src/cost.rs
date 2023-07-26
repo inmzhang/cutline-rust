@@ -2,11 +2,11 @@ use crate::config::AlgorithmConfig;
 use crate::cutline::Cutline;
 use crate::graph::{duality_map, Point, SearchGraph};
 use crate::pattern::{Order, Pattern};
+use fxhash::FxHashMap as HashMap;
+use fxhash::FxHashSet as HashSet;
 use itertools::Itertools;
 use rayon::prelude::*;
 use smallvec::SmallVec;
-use fxhash::FxHashMap as HashMap;
-use fxhash::FxHashSet as HashSet;
 
 const NEIGHBORS: &[(i32, i32)] = &[(1, 1), (1, -1), (-1, 1), (-1, -1)];
 
@@ -20,8 +20,12 @@ where
     P: Pattern + Send,
 {
     let ordering = algorithm_config.full_ordering();
+    // do not use Itertool's `counts()` here for using FxHashMap
     let mut order_counts = HashMap::default();
-    ordering.iter().copied().for_each(|item| *order_counts.entry(item).or_default() += 1);
+    ordering
+        .iter()
+        .copied()
+        .for_each(|item| *order_counts.entry(item).or_default() += 1);
     patterns
         // .into_iter()
         .into_par_iter()
@@ -49,7 +53,15 @@ where
         .collect();
     cutlines
         .iter()
-        .map(|cutline| cost_for_cutline(&order_map, &point_order_map, cutline, ordering, order_counts))
+        .map(|cutline| {
+            cost_for_cutline(
+                &order_map,
+                &point_order_map,
+                cutline,
+                ordering,
+                order_counts,
+            )
+        })
         .enumerate()
         .min_by(|&(_, c1), &(_, c2)| c1.partial_cmp(&c2).unwrap())
         .unwrap()
@@ -163,7 +175,7 @@ fn cost_for_cutline(
 
     let unbalance = cutline.unbalance as f64;
     (2f64.powf(unbalance / 2f64) + 2f64.powf(-unbalance / 2f64))
-        * (2 * length - start_end_elision - 2 * n_dcd - 2 * n_wedge) as f64
+        * 4f64.powf((length - n_dcd - n_wedge) as f64 - start_end_elision as f64 / 2f64)
 }
 
 fn get_edges_for_order(
