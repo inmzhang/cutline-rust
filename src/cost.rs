@@ -10,6 +10,8 @@ use smallvec::SmallVec;
 
 const NEIGHBORS: &[(i32, i32)] = &[(1, 1), (1, -1), (-1, 1), (-1, -1)];
 
+type Edge = (Point, Point);
+
 pub fn max_min_cost<P>(
     graph: &SearchGraph,
     patterns: Vec<P>,
@@ -68,22 +70,24 @@ where
 }
 
 fn cost_for_cutline(
-    order_map: &HashMap<(Point, Point), Option<Order>>,
-    point_order_map: &HashMap<Point, SmallVec<[(Order, (Point, Point)); 4]>>,
+    order_map: &HashMap<Edge, Option<Order>>,
+    point_order_map: &HashMap<Point, SmallVec<[(Order, Edge); 4]>>,
     cutline: &Cutline,
     ordering: &[Order],
     order_counts: &HashMap<Order, usize>,
 ) -> f64 {
     let path = &cutline.path;
-    let cut_edges = path
+    let cut_edges: SmallVec<[Edge; 20]> = path
         .iter()
         .tuple_windows()
         .map(|(&n1, &n2)| {
             let (n1, n2) = duality_map(n1, n2);
             (n1.min(n2), n1.max(n2))
         })
-        .collect_vec();
+        .collect();
+
     // map order to cutline edges
+    // TODO: attempt to remove the hashmap
     let order_to_edges: HashMap<Order, Vec<(Point, Point)>> = Order::all_possibles()
         .map(|order| {
             let edges = get_edges_for_order(order_map, &cut_edges, order);
@@ -99,6 +103,7 @@ fn cost_for_cutline(
         })
         .sum();
     // each gates can only be used in one optimization
+    // TODO: attempt vec instead of HashSet
     let mut used_gates: HashSet<(usize, (Point, Point))> = HashSet::default();
     // start and end elision
     let start_end_elision: usize = [
