@@ -34,7 +34,6 @@ fn main() {
     dbg!(patterns.len());
     let cutlines = search_cutlines(&graph, &algo);
     println!("Found {} valid cutlines", cutlines.len());
-    // dbg!(cutlines.clone());
     let patterns = patterns[0..20000].to_vec();
     let start_time = Instant::now();
     let optimal_cutline = max_min_cost(&graph, patterns, cutlines, &algo);

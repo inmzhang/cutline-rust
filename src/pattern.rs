@@ -55,16 +55,17 @@ impl Context {
 pub trait Pattern {
     fn look_up(&self, n1: Point, n2: Point, context: &Context) -> Option<Order>;
 
-    fn order_map(&self, graph: &SearchGraph) -> HashMap<(Point, Point), Option<Order>> {
+    fn order_map(&self, graph: &SearchGraph) -> HashMap<(Point, Point), Order> {
         let context = Context::from_graph(graph);
         let primal = &graph.primal;
-        primal.all_edges()
-            .map(|(n1, n2, _)| {
+        primal
+            .all_edges()
+            .filter_map(|(n1, n2, _)| {
                 let edge = (n1.min(n2), n1.max(n2));
                 if !primal.edge_weight(n1, n2).unwrap().to_owned() {
-                    (edge, None)
+                    None
                 } else {
-                    (edge, self.look_up(n1, n2, &context))
+                    Some((edge, self.look_up(n1, n2, &context).unwrap()))
                 }
             })
             .collect()

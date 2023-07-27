@@ -8,60 +8,73 @@ use rayon::prelude::*;
 use std::iter::from_fn;
 
 pub type Path = Vec<Point>;
+pub type Edge = (Point, Point);
+type Split = Vec<Edge>;
 
 #[derive(Debug, Clone)]
 pub struct Cutline {
-    pub path: Path,
+    pub split: Vec<Edge>,
     pub unbalance: usize,
 }
 
+fn path_to_split(path: Path) -> Split {
+    path.iter()
+        .tuple_windows()
+        .map(|(&n1, &n2)| {
+            let (n1, n2) = duality_map(n1, n2);
+            (n1.min(n2), n1.max(n2))
+        })
+        .collect_vec()
+}
+
 pub fn search_cutlines(graph: &SearchGraph, algorithm_config: &AlgorithmConfig) -> Vec<Cutline> {
-    let paths = search_paths(graph, algorithm_config);
-    println!("Found {} paths in total", paths.len());
-    let paths = dedup_virtual_dispatch(graph, paths);
-    debug_assert!(paths.iter().unique().count() == paths.len());
-    println!("Filter virtual path and have {} paths left", paths.len());
+    let splits = search_splits(graph, algorithm_config);
+    println!("Found {} splits in total", splits.len());
+    let splits = dedup_virtual_dispatch(graph, splits);
+    debug_assert!(splits.iter().unique().count() == splits.len());
+    println!("Found {} unique splits after deduplication", splits.len());
     let unused_qubits = &graph.unused_qubits;
     let mut used_qubits = graph.primal.nodes().collect_vec();
     used_qubits.retain(|q| !unused_qubits.contains(q));
-    limit_unbalance(graph, paths, algorithm_config.max_unbalance, &used_qubits)
+    limit_unbalance(graph, splits, algorithm_config.max_unbalance, &used_qubits)
+        .into_iter()
+        .map_into()
+        .collect()
 }
 
-fn dedup_virtual_dispatch(graph: &SearchGraph, paths: Vec<Path>) -> Vec<Path> {
-    let dual = &graph.dual;
-    paths
+fn dedup_virtual_dispatch(graph: &SearchGraph, splits: Vec<Split>) -> Vec<Split> {
+    let primal = &graph.primal;
+    splits
         .into_iter()
-        .unique_by(|path| {
-            path.clone()
-                .into_iter()
-                .tuple_windows()
-                .filter(|&(n1, n2)| dual.edge_weight(n1, n2).unwrap().to_owned())
-                .collect_vec()
+        .unique_by(|split| {
+            let mut split = split.clone();
+            split.retain(|e| primal.edge_weight(e.0, e.1).unwrap().to_owned());
+            split
         })
         .collect_vec()
 }
 
 fn limit_unbalance(
     graph: &SearchGraph,
-    paths: Vec<Path>,
+    splits: Vec<Split>,
     max_unbalance: usize,
     used_qubits: &Vec<Point>,
 ) -> Vec<Cutline> {
-    paths
+    splits
         .into_par_iter()
         // .into_iter()
-        .filter_map(|path| {
-            let unbalance = compute_unbalance(graph, used_qubits, &path);
+        .filter_map(|split| {
+            let unbalance = compute_unbalance(graph, used_qubits, &split);
             if unbalance > max_unbalance {
                 None
             } else {
-                Some(Cutline { path, unbalance })
+                Some(Cutline { split, unbalance })
             }
         })
         .collect()
 }
 
-fn search_paths(graph: &SearchGraph, algorithm_config: &AlgorithmConfig) -> Vec<Path> {
+fn search_splits(graph: &SearchGraph, algorithm_config: &AlgorithmConfig) -> Vec<Split> {
     let boundaries = graph.dual_boundaries.clone();
     (0..boundaries.len() - 1)
         .into_par_iter()
@@ -75,6 +88,7 @@ fn search_paths(graph: &SearchGraph, algorithm_config: &AlgorithmConfig) -> Vec<
                 algorithm_config.min_search_depth,
                 algorithm_config.max_search_depth,
             )
+            .map(path_to_split)
             .collect_vec()
         })
         .collect()
@@ -130,18 +144,10 @@ fn search_paths_between(
     })
 }
 
-fn compute_unbalance(graph: &SearchGraph, used_qubits: &Vec<Point>, path: &Path) -> usize {
-    let filtered_edges = path
-        .iter()
-        .tuple_windows()
-        .map(|(&n1, &n2)| {
-            let (n1, n2) = duality_map(n1, n2);
-            (n1.min(n2), n1.max(n2))
-        })
-        .collect_vec();
+fn compute_unbalance(graph: &SearchGraph, used_qubits: &Vec<Point>, split: &Split) -> usize {
     let filtered_graph = EdgeFiltered::from_fn(&graph.primal, |e| {
         let (source, target) = (e.source(), e.target());
-        !filtered_edges.contains(&(source.min(target), source.max(target)))
+        !split.contains(&(source.min(target), source.max(target)))
     });
     let mut dfs = Dfs::new(&filtered_graph, used_qubits[0]);
     let mut count = 0;
