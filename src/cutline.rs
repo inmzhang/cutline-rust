@@ -17,6 +17,81 @@ pub struct Cutline {
     pub unbalance: usize,
 }
 
+#[derive(Debug, Clone)]
+pub struct CutlineWrapped {
+    pub split: Vec<usize>,
+    pub unbalance: usize,
+    pub wedge_candidates: Vec<(usize, usize)>,
+    pub dcd_candidates: Vec<(usize, usize)>,
+}
+
+impl Cutline {
+    pub fn into_wrapped(self, graph: &SearchGraph) -> CutlineWrapped {
+        let primal = &graph.primal;
+        let split = self
+            .split
+            .into_iter()
+            .filter(|e| primal.edge_weight(e.0, e.1).unwrap().to_owned())
+            .collect_vec();
+        let wedge_candidates = split
+            .iter()
+            .combinations(2)
+            .filter_map(|comb| {
+                let (e1, e2) = (*comb[0], *comb[1]);
+                if e1.0 == e2.0 || e1.0 == e2.1 || e1.1 == e2.0 || e1.1 == e2.1 {
+                    Some((graph.edge_index(e1.0, e1.1), graph.edge_index(e2.0, e2.1)))
+                } else {
+                    None
+                }
+            })
+            .collect_vec();
+        let dcd_candidates = split
+            .iter()
+            .filter_map(|&(n1, n2)| {
+                let incident_node1 = (2 * n1.0 - n2.0, 2 * n1.1 - n2.1);
+                let incident_node2 = (2 * n2.0 - n1.0, 2 * n2.1 - n1.1);
+                match (
+                    primal.edge_weight(n1, incident_node1).copied(),
+                    primal.edge_weight(n2, incident_node2).copied(),
+                ) {
+                    (Some(true), Some(false)) | (Some(true), None) => Some((
+                        graph.edge_index(n1, n2),
+                        graph.edge_index(incident_node1, n1),
+                    )),
+                    (Some(false), Some(true)) | (None, Some(true)) => Some((
+                        graph.edge_index(n1, n2),
+                        graph.edge_index(n2, incident_node2),
+                    )),
+                    _ => None,
+                }
+            })
+            .collect_vec();
+
+        let split = split
+            .into_iter()
+            .map(|(n1, n2)| graph.edge_index(n1, n2))
+            .collect_vec();
+        CutlineWrapped {
+            split,
+            unbalance: self.unbalance,
+            wedge_candidates,
+            dcd_candidates,
+        }
+    }
+
+    pub fn from_wrapper(wrapper: CutlineWrapped, graph: &SearchGraph) -> Self {
+        let split = wrapper
+            .split
+            .into_iter()
+            .map(|e| graph.get_edge(e))
+            .collect_vec();
+        Cutline {
+            split,
+            unbalance: wrapper.unbalance,
+        }
+    }
+}
+
 fn path_to_split(path: Path) -> Split {
     path.iter()
         .tuple_windows()
@@ -77,7 +152,6 @@ fn limit_unbalance(
 fn search_splits(graph: &SearchGraph, algorithm_config: &AlgorithmConfig) -> Vec<Split> {
     let boundaries = graph.dual_boundaries.clone();
     (0..boundaries.len() - 1)
-        .into_par_iter()
         .flat_map(|i| {
             let from = boundaries[i];
             let tos = boundaries[i + 1..].to_owned();

@@ -1,16 +1,13 @@
-// use std::collections::HashMap;
-use fxhash::FxHashMap as HashMap;
-
 use crate::graph::{Point, SearchGraph};
 use fixedbitset::FixedBitSet;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash, Serialize, Deserialize)]
 pub enum Order {
-    A,
-    B,
-    C,
-    D,
+    A = 0,
+    B = 1,
+    C = 2,
+    D = 3,
 }
 
 impl Order {
@@ -55,20 +52,18 @@ impl Context {
 pub trait Pattern {
     fn look_up(&self, n1: Point, n2: Point, context: &Context) -> Option<Order>;
 
-    fn order_map(&self, graph: &SearchGraph) -> HashMap<(Point, Point), Order> {
+    fn order_vec(&self, graph: &SearchGraph) -> Vec<Option<Order>> {
         let context = Context::from_graph(graph);
         let primal = &graph.primal;
-        primal
-            .all_edges()
-            .filter_map(|(n1, n2, _)| {
-                let edge = (n1.min(n2), n1.max(n2));
-                if !primal.edge_weight(n1, n2).unwrap().to_owned() {
-                    None
-                } else {
-                    Some((edge, self.look_up(n1, n2, &context).unwrap()))
-                }
-            })
-            .collect()
+        let mut order_vec = vec![None; primal.edge_count()];
+        primal.all_edges().for_each(|(n1, n2, &is_real)| {
+            if is_real {
+                let order = self.look_up(n1, n2, &context);
+                let index = graph.edge_index(n1, n2);
+                order_vec[index] = order;
+            }
+        });
+        order_vec
     }
 }
 

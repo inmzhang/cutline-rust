@@ -70,6 +70,23 @@ impl SearchGraph {
     pub fn edges_per_line(&self) -> usize {
         self.primal.edge_count() / (self.config.grid_height as usize - 1)
     }
+
+    #[inline(always)]
+    pub fn edge_index(&self, n1: Point, n2: Point) -> usize {
+        ((n1.1 + n2.1) / 2) as usize * (self.config.grid_width - 1) as usize
+            + ((n1.0 + n2.0) / 2) as usize
+    }
+
+    #[inline(always)]
+    pub fn get_edge(&self, index: usize) -> (Point, Point) {
+        let width = self.config.grid_width as usize - 1;
+        let (quotient, remainder) = ((index / width) as i32, (index % width) as i32);
+        if self.primal.contains_node((remainder, quotient)) {
+            ((remainder, quotient), (remainder + 1, quotient + 1))
+        } else {
+            ((remainder, quotient + 1), (remainder + 1, quotient))
+        }
+    }
 }
 
 impl Default for SearchGraph {
@@ -273,9 +290,20 @@ mod tests {
     }
 
     #[test]
-    fn num_slash() {
+    fn test_num_slash() {
         let graph = SearchGraph::default();
         assert_eq!(graph.num_slash(), 10);
         assert_eq!(graph.num_back_slash(), 10);
+    }
+
+    #[test]
+    fn test_edge_index() {
+        let graph = SearchGraph::default();
+        assert_eq!(graph.edge_index((0, 1), (1, 0)), 0);
+        assert_eq!(graph.edge_index((3, 2), (2, 1)), 13);
+        assert_eq!(graph.edge_index((10, 9), (11, 10)), 109);
+        assert_eq!(graph.get_edge(0), ((0, 1), (1, 0)));
+        assert_eq!(graph.get_edge(13), ((2, 1), (3, 2)));
+        assert_eq!(graph.get_edge(109), ((10, 9), (11, 10)));
     }
 }
