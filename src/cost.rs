@@ -2,11 +2,11 @@ use crate::config::AlgorithmConfig;
 use crate::cutline::{Cutline, CutlineWrapped};
 use crate::graph::SearchGraph;
 use crate::pattern::{BitPattern, Order, Pattern};
-use fxhash::FxHashSet as HashSet;
+use fixedbitset::FixedBitSet;
 use itertools::Itertools;
 use rayon::prelude::*;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy)]
 pub struct Cost {
     gates: usize,
     start_end: usize,
@@ -15,31 +15,98 @@ pub struct Cost {
     unbalance: usize,
 }
 
-impl Ord for Cost {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.partial_cmp(other).unwrap()
-    }
-}
-
-impl PartialOrd<Self> for Cost {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        let u1 = unbalance_modify(self.unbalance);
-        let u2 = unbalance_modify(other.unbalance);
-        let cut = 4f64.powf(self.cut_length() - other.cut_length());
-        (u1 / u2 * cut).partial_cmp(&1f64)
-    }
-}
-
-#[inline(always)]
-fn unbalance_modify(unbalance: usize) -> f64 {
-    let unbalance = unbalance as f64;
-    2f64.powf(unbalance / 2f64) + 2f64.powf(-unbalance / 2f64)
-}
-
 impl Cost {
-    #[inline(always)]
+    #[inline]
     fn cut_length(&self) -> f64 {
         (self.gates - self.dcd - self.wedge) as f64 - self.start_end as f64 / 2f64
+    }
+
+    #[inline]
+    fn cost(&self) -> f64 {
+        let length = self.cut_length();
+        4f64.powf(length + self.unbalance as f64 / 4f64)
+            + 4f64.powf(length - self.unbalance as f64 / 4f64)
+    }
+}
+
+struct UsedBoard {
+    flags: FixedBitSet,
+    n_edges: usize,
+}
+
+impl UsedBoard {
+    fn new(n_edges: usize, depth: usize) -> Self {
+        Self {
+            flags: FixedBitSet::with_capacity(depth * n_edges),
+            n_edges,
+        }
+    }
+
+    #[inline]
+    fn is_used(&self, depth: usize, edge: usize) -> bool {
+        self.flags[self.index(depth, edge)]
+    }
+
+    #[inline]
+    fn set_used(&mut self, depth: usize, edge: usize) {
+        self.flags.put(self.index(depth, edge));
+    }
+
+    #[inline]
+    fn index(&self, depth: usize, edge: usize) -> usize {
+        depth * self.n_edges + edge
+    }
+
+    #[inline]
+    fn reset(&mut self) {
+        self.flags.clear();
+    }
+}
+
+struct OrderInfo {
+    ordering: Vec<Order>,
+    order_counts: [usize; 4],
+    potential_wedges: Vec<(usize, Order, Order)>,
+    potential_dcds: Vec<(usize, Order, Order)>,
+}
+
+impl OrderInfo {
+    fn new(ordering: &[Order]) -> Self {
+        let mut order_counts = [0; 4];
+        for order in ordering {
+            order_counts[*order as usize] += 1;
+        }
+        let potential_wedges = ordering
+            .windows(2)
+            .enumerate()
+            .filter_map(|(i, window)| {
+                let (order1, order2) = (window[0], window[1]);
+                match (order1.min(order2), order1.max(order2)) {
+                    (Order::A, Order::B) | (Order::C, Order::D) => None,
+                    _ => Some((i, order1, order2)),
+                }
+            })
+            .collect_vec();
+        let potential_dcds = ordering
+            .windows(3)
+            .enumerate()
+            .filter_map(|(i, window)| {
+                let (order1, order2, order3) = (window[0], window[1], window[2]);
+                if order1 != order3 {
+                    return None;
+                }
+                match (order1.min(order2), order1.max(order2)) {
+                    (Order::A, Order::B) | (Order::C, Order::D) => Some((i, order1, order2)),
+                    _ => None,
+                }
+            })
+            .collect_vec();
+        Self {
+            ordering: ordering.to_vec(),
+            order_counts,
+            potential_wedges,
+            potential_dcds,
+        }
     }
 }
 
@@ -57,11 +124,7 @@ pub fn max_min_cost(
     algorithm_config: &AlgorithmConfig,
 ) -> Vec<Record> {
     let ordering = algorithm_config.ordering.clone();
-    // do not use Itertool's `counts()` here for using FxHashMap
-    let mut order_counts = [0usize; 4];
-    ordering.iter().for_each(|item| {
-        order_counts[*item as usize] += 1;
-    });
+    let order_info = OrderInfo::new(&ordering);
     let cutlines_wrapped = cutlines
         .into_iter()
         .map(|c| c.into_wrapped(graph))
@@ -72,13 +135,13 @@ pub fn max_min_cost(
         .map(|pattern| {
             (
                 pattern.clone(),
-                calculate_min_cost(graph, pattern, &cutlines_wrapped, &ordering, &order_counts),
+                calculate_min_cost(graph, pattern, &cutlines_wrapped, &order_info),
             )
         })
         .collect();
     costs
         .into_iter()
-        .max_set_by(|&(_, (_, c1)), &(_, (_, c2))| c1.cmp(&c2))
+        .max_set_by(|&(_, (_, c1)), &(_, (_, c2))| c1.cost().partial_cmp(&c2.cost()).unwrap())
         .into_iter()
         .map(|(pattern, (i, cost))| Record {
             pattern,
@@ -92,23 +155,23 @@ fn calculate_min_cost(
     graph: &SearchGraph,
     pattern: BitPattern,
     cutlines: &[CutlineWrapped],
-    ordering: &[Order],
-    order_counts: &[usize; 4],
+    order_info: &OrderInfo,
 ) -> (usize, Cost) {
     let order_vec = pattern.order_vec(graph);
+    let mut used_flags = UsedBoard::new(graph.primal.edge_count(), order_info.ordering.len());
     cutlines
         .iter()
-        .map(|cutline| cost_for_cutline(&order_vec, cutline, ordering, order_counts))
+        .map(|cutline| cost_for_cutline(&order_vec, cutline, order_info, &mut used_flags))
         .enumerate()
-        .min_by(|&(_, c1), &(_, c2)| c1.cmp(&c2))
+        .min_by(|&(_, c1), &(_, c2)| c1.cost().partial_cmp(&c2.cost()).unwrap())
         .unwrap()
 }
 
 fn cost_for_cutline(
     order_vec: &[Option<Order>],
     cutline: &CutlineWrapped,
-    ordering: &[Order],
-    order_counts: &[usize; 4],
+    order_info: &OrderInfo,
+    use_flags: &mut UsedBoard,
 ) -> Cost {
     let CutlineWrapped {
         split,
@@ -117,6 +180,13 @@ fn cost_for_cutline(
         wedge_candidates,
         dcd_candidates,
     } = &cutline;
+
+    let OrderInfo {
+        ordering,
+        order_counts,
+        potential_wedges,
+        potential_dcds,
+    } = order_info;
 
     // total two qubits gates on the cut
     let length: usize = split
@@ -127,10 +197,6 @@ fn cost_for_cutline(
         })
         .sum();
 
-    // each gates can only be used in one optimization
-    let mut used_gates: HashSet<(usize, usize)> = HashSet::default();
-    used_gates.reserve(length);
-
     // start and end swap reduction
     let mut start_end_elision: usize = 0;
     let start_order = *ordering.first().unwrap();
@@ -139,34 +205,33 @@ fn cost_for_cutline(
     split.iter().for_each(|&e| {
         let order = order_vec[e].unwrap();
         if order == start_order {
-            used_gates.insert((0, e));
+            use_flags.set_used(0, e);
             start_end_elision += 1;
         }
         if order == end_order {
-            used_gates.insert((depth, e));
+            use_flags.set_used(depth, e);
             start_end_elision += 1;
         }
     });
 
     // Wedge fusion
     let mut n_wedge: usize = 0;
-    ordering.windows(2).enumerate().for_each(|(i, wedge)| {
-        let (order1, order2) = (wedge[0], wedge[1]);
+    potential_wedges.iter().for_each(|&(i, order1, order2)| {
         wedge_candidates.iter().for_each(|&(e1, e2)| {
             if order_vec[e1].unwrap() == order1 && order_vec[e2].unwrap() == order2 {
-                if used_gates.contains(&(i, e1)) || used_gates.contains(&(i + 1, e2)) {
+                if use_flags.is_used(i, e1) || use_flags.is_used(i + 1, e2) {
                     return;
                 }
-                used_gates.insert((i, e1));
-                used_gates.insert((i + 1, e2));
+                use_flags.set_used(i, e1);
+                use_flags.set_used(i + 1, e2);
                 n_wedge += 1;
             }
             if order_vec[e1].unwrap() == order2 && order_vec[e2].unwrap() == order1 {
-                if used_gates.contains(&(i, e2)) || used_gates.contains(&(i + 1, e1)) {
+                if use_flags.is_used(i, e2) || use_flags.is_used(i + 1, e1) {
                     return;
                 }
-                used_gates.insert((i, e2));
-                used_gates.insert((i + 1, e1));
+                use_flags.set_used(i, e2);
+                use_flags.set_used(i + 1, e1);
                 n_wedge += 1;
             }
         })
@@ -174,29 +239,26 @@ fn cost_for_cutline(
 
     // DCD fusion
     let mut n_dcd: usize = 0;
-    ordering
-        .windows(3)
-        .enumerate()
-        .filter(|&(_, window)| window[0] == window[2])
-        .for_each(|(i, dcd)| {
-            let (order1, order2) = (dcd[0], dcd[1]);
-            dcd_candidates.iter().for_each(|&(e1, e2)| {
-                if order_vec[e1].unwrap() == order1
-                    && order_vec[e2].unwrap() == order2
-                    && !used_gates.contains(&(i, e1))
-                    && !used_gates.contains(&(i + 2, e1))
-                    && !used_gates.contains(&(i + 1, e2))
-                {
-                    used_gates.insert((i, e1));
-                    used_gates.insert((i + 2, e1));
-                    used_gates.insert((i + 1, e2));
+    potential_dcds.iter().for_each(|&(i, order1, order2)| {
+        dcd_candidates.iter().for_each(|&(e1, e2)| {
+            if order_vec[e1].unwrap() == order1
+                && order_vec[e2].unwrap() == order2
+                && !use_flags.is_used(i, e1)
+                && !use_flags.is_used(i + 2, e1)
+                && !use_flags.is_used(i + 1, e2)
+            {
+                use_flags.set_used(i, e1);
+                use_flags.set_used(i + 2, e1);
+                use_flags.set_used(i + 1, e2);
+                n_dcd += 1;
+                if split.contains(&e2) {
                     n_dcd += 1;
-                    if split.contains(&e2) {
-                        n_dcd += 1;
-                    }
                 }
-            })
-        });
+            }
+        })
+    });
+
+    use_flags.reset();
 
     Cost {
         gates: length,

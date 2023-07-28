@@ -33,14 +33,17 @@ fn main() {
     dbg!(patterns.len());
     let cutlines = search_cutlines(&graph, &algo);
     println!("Found {} valid cutlines", cutlines.len());
-    let patterns = patterns[0..200000].to_vec();
+    // let patterns = patterns[0..200000].to_vec();
     let start_time = Instant::now();
     let optimal_cutline = max_min_cost(&graph, patterns, cutlines, &algo);
     let end_time = Instant::now();
     let elapsed_time = end_time - start_time;
     println!("Elapsed time: {:?}", elapsed_time);
     println!("Found {} optimal cutlines", optimal_cutline.len());
-    println!("Optimal cutline: {:?}", optimal_cutline[0]);
+    // println!("Optimal cutline: {:?}", optimal_cutline[0]);
+    // optimal_cutline.into_iter().for_each(|c| {
+    //     println!("{:?}", c.cost.cost());
+    // });
     // println!(
     //     "Wrapped: {:?}",
     //     optimal_cutline[0].clone().cutline.into_wrapped(&graph)

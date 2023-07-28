@@ -2,7 +2,7 @@ use crate::graph::{Point, SearchGraph};
 use fixedbitset::FixedBitSet;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash, Serialize, Deserialize, PartialOrd, Ord)]
 pub enum Order {
     A = 0,
     B = 1,
