@@ -2,7 +2,7 @@ use crate::config::TopologyConfig;
 use anyhow::{bail, Ok, Result};
 use itertools::Itertools;
 use petgraph::{algo::connected_components, graphmap::UnGraphMap};
-use std::collections::HashMap;
+use indexmap::IndexMap;
 
 pub type CutGraph = UnGraphMap<(i32, i32), bool>;
 pub type Point = (i32, i32);
@@ -109,7 +109,7 @@ fn create_primal(config: &TopologyConfig) -> Result<(CutGraph, Vec<Point>)> {
     let unused_qubits = &config.unused_qubits;
     let unused_couplers = &config.unused_couplers;
     let mut primal = UnGraphMap::new();
-    let qubits_map: HashMap<_, _> = (0..height)
+    let qubits_map: IndexMap<_, _> = (0..height)
         .cartesian_product(0..width)
         .filter(|&(y, x)| in_primal(x as i32, y as i32, config.qubit_at_origin))
         .enumerate()

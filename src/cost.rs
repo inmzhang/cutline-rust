@@ -22,7 +22,7 @@ impl Cost {
     }
 
     #[inline]
-    fn cost(&self) -> f64 {
+    pub fn cost(&self) -> f64 {
         let length = self.cut_length();
         4f64.powf(length + self.unbalance as f64 / 4f64)
             + 4f64.powf(length - self.unbalance as f64 / 4f64)
@@ -63,6 +63,7 @@ impl UsedBoard {
     }
 }
 
+#[derive(Debug, Clone)]
 struct OrderInfo {
     ordering: Vec<Order>,
     order_counts: [usize; 4],
@@ -126,6 +127,7 @@ pub fn max_min_cost(
     let ordering = algorithm_config.ordering.clone();
     let order_info = OrderInfo::new(&ordering);
     let cutlines_wrapped = cutlines
+        .clone()
         .into_iter()
         .map(|c| c.into_wrapped(graph))
         .collect_vec();
@@ -202,7 +204,7 @@ fn cost_for_cutline(
     let start_order = *ordering.first().unwrap();
     let end_order = *ordering.last().unwrap();
     let depth = ordering.len() - 1;
-    split.iter().for_each(|&e| {
+    for &e in split {
         let order = order_vec[e].unwrap();
         if order == start_order {
             use_flags.set_used(0, e);
@@ -212,35 +214,29 @@ fn cost_for_cutline(
             use_flags.set_used(depth, e);
             start_end_elision += 1;
         }
-    });
+    }
 
     // Wedge fusion
     let mut n_wedge: usize = 0;
-    potential_wedges.iter().for_each(|&(i, order1, order2)| {
-        wedge_candidates.iter().for_each(|&(e1, e2)| {
-            if order_vec[e1].unwrap() == order1 && order_vec[e2].unwrap() == order2 {
-                if use_flags.is_used(i, e1) || use_flags.is_used(i + 1, e2) {
-                    return;
+    for &(i, order1, order2) in potential_wedges {
+        for &(e1, e2) in wedge_candidates {
+            for (e1, e2) in [(e1, e2), (e2, e1)] {
+                if order_vec[e1].unwrap() == order1 && order_vec[e2].unwrap() == order2 {
+                    if !use_flags.is_used(i, e1) && !use_flags.is_used(i + 1, e2) {
+                        use_flags.set_used(i, e1);
+                        use_flags.set_used(i + 1, e2);
+                        n_wedge += 1;
+                    }
+                    break;
                 }
-                use_flags.set_used(i, e1);
-                use_flags.set_used(i + 1, e2);
-                n_wedge += 1;
             }
-            if order_vec[e1].unwrap() == order2 && order_vec[e2].unwrap() == order1 {
-                if use_flags.is_used(i, e2) || use_flags.is_used(i + 1, e1) {
-                    return;
-                }
-                use_flags.set_used(i, e2);
-                use_flags.set_used(i + 1, e1);
-                n_wedge += 1;
-            }
-        })
-    });
+        }
+    }
 
     // DCD fusion
     let mut n_dcd: usize = 0;
-    potential_dcds.iter().for_each(|&(i, order1, order2)| {
-        dcd_candidates.iter().for_each(|&(e1, e2)| {
+    for &(i, order1, order2) in potential_dcds {
+        for &(e1, e2) in dcd_candidates {
             if order_vec[e1].unwrap() == order1
                 && order_vec[e2].unwrap() == order2
                 && !use_flags.is_used(i, e1)
@@ -255,8 +251,8 @@ fn cost_for_cutline(
                     n_dcd += 1;
                 }
             }
-        })
-    });
+        }
+    }
 
     use_flags.reset();
 

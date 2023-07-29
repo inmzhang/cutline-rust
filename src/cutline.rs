@@ -4,14 +4,13 @@ use crate::{
 };
 use itertools::Itertools;
 use petgraph::visit::{Dfs, EdgeFiltered, EdgeRef};
-use rayon::prelude::*;
 use std::iter::from_fn;
 
 pub type Path = Vec<Point>;
 pub type Edge = (Point, Point);
 type Split = Vec<Edge>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Cutline {
     pub split: Vec<Edge>,
     pub unbalance: usize,
@@ -136,8 +135,7 @@ fn limit_unbalance(
     used_qubits: &Vec<Point>,
 ) -> Vec<Cutline> {
     splits
-        .into_par_iter()
-        // .into_iter()
+        .into_iter()
         .filter_map(|split| {
             let unbalance = compute_unbalance(graph, used_qubits, &split);
             if unbalance > max_unbalance {
