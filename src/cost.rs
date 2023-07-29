@@ -1,9 +1,12 @@
+use std::fmt::Write;
+
 use crate::config::AlgorithmConfig;
 use crate::cutline::{Cutline, CutlineWrapped};
 use crate::graph::SearchGraph;
 use crate::pattern::{BitPattern, Order, Pattern};
 use fixedbitset::FixedBitSet;
 use indicatif::ParallelProgressIterator;
+use indicatif::{ProgressBar, ProgressState, ProgressStyle};
 use itertools::Itertools;
 use rayon::prelude::*;
 
@@ -127,15 +130,28 @@ pub fn max_min_cost(
 ) -> Vec<Record> {
     let ordering = algorithm_config.ordering.clone();
     let order_info = OrderInfo::new(&ordering);
-    let n_tasks = patterns.len() as u64;
     let cutlines_wrapped = cutlines
         .clone()
         .into_iter()
         .map(|c| c.into_wrapped(graph))
         .collect_vec();
+    // progress bar
+    let n_tasks = patterns.len() as u64;
+    let pb = ProgressBar::new(n_tasks);
+    pb.set_style(
+        ProgressStyle::with_template(
+            "{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {pos}/{len} ({eta})",
+        )
+        .unwrap()
+        .with_key("eta", |state: &ProgressState, w: &mut dyn Write| {
+            write!(w, "{:.1}s", state.eta().as_secs_f64()).unwrap()
+        })
+        .progress_chars("#>-"),
+    );
+
     let costs: Vec<_> = patterns
         .into_par_iter()
-        .progress_count(n_tasks)
+        .progress_with(pb)
         .map(|pattern| {
             (
                 pattern.clone(),

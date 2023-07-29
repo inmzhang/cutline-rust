@@ -1,8 +1,8 @@
 use crate::config::TopologyConfig;
 use anyhow::{bail, Ok, Result};
+use indexmap::IndexMap;
 use itertools::Itertools;
 use petgraph::{algo::connected_components, graphmap::UnGraphMap};
-use indexmap::IndexMap;
 
 pub type CutGraph = UnGraphMap<(i32, i32), bool>;
 pub type Point = (i32, i32);
