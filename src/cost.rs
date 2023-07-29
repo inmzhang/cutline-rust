@@ -3,11 +3,11 @@ use crate::cutline::{Cutline, CutlineWrapped};
 use crate::graph::SearchGraph;
 use crate::pattern::{BitPattern, Order, Pattern};
 use fixedbitset::FixedBitSet;
+use indicatif::ParallelProgressIterator;
 use itertools::Itertools;
 use rayon::prelude::*;
-use indicatif::ParallelProgressIterator;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Cost {
     gates: usize,
     start_end: usize,
@@ -134,7 +134,6 @@ pub fn max_min_cost(
         .map(|c| c.into_wrapped(graph))
         .collect_vec();
     let costs: Vec<_> = patterns
-        // .into_iter()
         .into_par_iter()
         .progress_count(n_tasks)
         .map(|pattern| {
@@ -219,23 +218,6 @@ fn cost_for_cutline(
         }
     }
 
-    // Wedge fusion
-    let mut n_wedge: usize = 0;
-    for &(i, order1, order2) in potential_wedges {
-        for &(e1, e2) in wedge_candidates {
-            for (e1, e2) in [(e1, e2), (e2, e1)] {
-                if order_vec[e1].unwrap() == order1 && order_vec[e2].unwrap() == order2 {
-                    if !use_flags.is_used(i, e1) && !use_flags.is_used(i + 1, e2) {
-                        use_flags.set_used(i, e1);
-                        use_flags.set_used(i + 1, e2);
-                        n_wedge += 1;
-                    }
-                    break;
-                }
-            }
-        }
-    }
-
     // DCD fusion
     let mut n_dcd: usize = 0;
     for &(i, order1, order2) in potential_dcds {
@@ -252,6 +234,23 @@ fn cost_for_cutline(
                 n_dcd += 1;
                 if split.contains(&e2) {
                     n_dcd += 1;
+                }
+            }
+        }
+    }
+
+    // Wedge fusion
+    let mut n_wedge: usize = 0;
+    for &(i, order1, order2) in potential_wedges {
+        for &(e1, e2) in wedge_candidates {
+            for (e1, e2) in [(e1, e2), (e2, e1)] {
+                if order_vec[e1].unwrap() == order1 && order_vec[e2].unwrap() == order2 {
+                    if !use_flags.is_used(i, e1) && !use_flags.is_used(i + 1, e2) {
+                        use_flags.set_used(i, e1);
+                        use_flags.set_used(i + 1, e2);
+                        n_wedge += 1;
+                    }
+                    break;
                 }
             }
         }

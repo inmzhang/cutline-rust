@@ -13,6 +13,7 @@ use itertools::Itertools;
 use search_pattern::search_bit_patterns;
 use std::time::Instant;
 
+
 fn main() {
     let topo = TopologyConfigBuilder::default()
         .grid_width(12)
@@ -33,14 +34,16 @@ fn main() {
     let cutlines = search_cutlines(&graph, &algo);
     println!("Found {} valid cutlines", cutlines.len());
 
-    // let patterns = patterns[0..200000].to_vec();
+    let patterns = patterns[0..200000].to_vec();
     let start_time = Instant::now();
+
     let optimal_cutline = max_min_cost(&graph, patterns, cutlines, &algo);
     let end_time = Instant::now();
     let elapsed_time = end_time - start_time;
     println!("Elapsed time: {:?}", elapsed_time);
-    println!("Found {} optimal cutlines", optimal_cutline.len());
     println!("Optimal cutline: {:?}", optimal_cutline[0]);
+    println!("Found {} optimal cutlines", optimal_cutline.len());
+
     // optimal_cutline.iter().for_each(|c| {
     //     println!("{:?}", c.cost);
     // });
