@@ -5,6 +5,7 @@ use crate::pattern::{BitPattern, Order, Pattern};
 use fixedbitset::FixedBitSet;
 use itertools::Itertools;
 use rayon::prelude::*;
+use indicatif::ParallelProgressIterator;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Cost {
@@ -126,6 +127,7 @@ pub fn max_min_cost(
 ) -> Vec<Record> {
     let ordering = algorithm_config.ordering.clone();
     let order_info = OrderInfo::new(&ordering);
+    let n_tasks = patterns.len() as u64;
     let cutlines_wrapped = cutlines
         .clone()
         .into_iter()
@@ -134,6 +136,7 @@ pub fn max_min_cost(
     let costs: Vec<_> = patterns
         // .into_iter()
         .into_par_iter()
+        .progress_count(n_tasks)
         .map(|pattern| {
             (
                 pattern.clone(),
