@@ -1,4 +1,4 @@
-use std::fmt::Write;
+use std::fmt::{Debug, Write};
 
 use crate::config::AlgorithmConfig;
 use crate::cutline::{Cutline, CutlineWrapped};

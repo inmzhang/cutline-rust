@@ -32,7 +32,7 @@ fn dead_slash_indices(graph: &SearchGraph) -> Vec<usize> {
             n1,
             n2,
             graph.config.qubit_at_origin,
-            graph.config.grid_height,
+            graph.config.height,
             n_slash,
         );
         live_slash.insert(index);
@@ -91,7 +91,7 @@ fn search_vec_patterns_rec(
     for order in allowed_orders {
         let mut new_pattern = base_pattern.clone();
         for (&o, &neighbor) in order.iter().zip(neighbors_unassigned.iter()) {
-            let index = get_edge_index(next_node, neighbor, graph.edges_per_line());
+            let index = get_edge_index(next_node, neighbor, (graph.config.width - 1) as usize);
             new_pattern[index] = Some(o);
         }
         let searched_patterns = search_vec_patterns_rec(graph, new_pattern, searched_nodes.clone());
@@ -152,8 +152,8 @@ mod tests {
     #[test]
     fn test_vec_pattern() {
         let config = TopologyConfigBuilder::default()
-            .grid_width(4)
-            .grid_height(3)
+            .width(4)
+            .height(3)
             .build()
             .unwrap();
         let graph = SearchGraph::from_config(config).unwrap();

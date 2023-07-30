@@ -20,8 +20,8 @@ impl SearchGraph {
     pub fn from_config(config: TopologyConfig) -> Result<Self> {
         let (primal, unused_qubits) = create_primal(&config)?;
         let mut dual = create_dual(&primal);
-        let width = config.grid_width;
-        let height = config.grid_height;
+        let width = config.width;
+        let height = config.height;
         let mut dual_boundaries = get_dual_boundary(&dual, width, height);
         let dangling_nodes = dangling_nodes(&dual);
         dangling_nodes
@@ -43,7 +43,7 @@ impl SearchGraph {
     #[allow(unused)]
     pub fn num_slash(&self) -> usize {
         let primal = &self.primal;
-        let primal_width = self.config.grid_width as i32;
+        let primal_width = self.config.width as i32;
         primal
             .nodes()
             .filter(|&n| {
@@ -56,8 +56,8 @@ impl SearchGraph {
     #[allow(unused)]
     pub fn num_back_slash(&self) -> usize {
         let primal = &self.primal;
-        let primal_width = self.config.grid_width as i32;
-        let primal_height = self.config.grid_height as i32;
+        let primal_width = self.config.width as i32;
+        let primal_height = self.config.height as i32;
         primal
             .nodes()
             .filter(|&n| {
@@ -67,19 +67,15 @@ impl SearchGraph {
             .count()
     }
 
-    pub fn edges_per_line(&self) -> usize {
-        self.primal.edge_count() / (self.config.grid_height as usize - 1)
-    }
-
     #[inline(always)]
     pub fn edge_index(&self, n1: Point, n2: Point) -> usize {
-        ((n1.1 + n2.1) / 2) as usize * (self.config.grid_width - 1) as usize
+        ((n1.1 + n2.1) / 2) as usize * (self.config.width - 1) as usize
             + ((n1.0 + n2.0) / 2) as usize
     }
 
     #[inline(always)]
     pub fn get_edge(&self, index: usize) -> (Point, Point) {
-        let width = self.config.grid_width as usize - 1;
+        let width = self.config.width as usize - 1;
         let (quotient, remainder) = ((index / width) as i32, (index % width) as i32);
         if self.primal.contains_node((remainder, quotient)) {
             ((remainder, quotient), (remainder + 1, quotient + 1))
@@ -104,8 +100,8 @@ pub fn duality_map(p1: Point, p2: Point) -> (Point, Point) {
 }
 
 fn create_primal(config: &TopologyConfig) -> Result<(CutGraph, Vec<Point>)> {
-    let width = config.grid_width;
-    let height = config.grid_height;
+    let width = config.width;
+    let height = config.height;
     let unused_qubits = &config.unused_qubits;
     let unused_couplers = &config.unused_couplers;
     let mut primal = UnGraphMap::new();

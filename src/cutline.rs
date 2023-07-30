@@ -103,10 +103,8 @@ fn path_to_split(path: Path) -> Split {
 
 pub fn search_cutlines(graph: &SearchGraph, algorithm_config: &AlgorithmConfig) -> Vec<Cutline> {
     let splits = search_splits(graph, algorithm_config);
-    // println!("Found {} splits in total", splits.len());
     let splits = dedup_virtual_dispatch(graph, splits);
     debug_assert!(splits.iter().unique().count() == splits.len());
-    // println!("Found {} unique splits after deduplication", splits.len());
     let unused_qubits = &graph.unused_qubits;
     let mut used_qubits = graph.primal.nodes().collect_vec();
     used_qubits.retain(|q| !unused_qubits.contains(q));
@@ -157,8 +155,8 @@ fn search_splits(graph: &SearchGraph, algorithm_config: &AlgorithmConfig) -> Vec
                 graph,
                 from,
                 tos,
-                algorithm_config.min_search_depth,
-                algorithm_config.max_search_depth,
+                algorithm_config.min_depth,
+                algorithm_config.max_depth,
             )
             .map(path_to_split)
             .collect_vec()
