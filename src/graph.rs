@@ -40,7 +40,6 @@ impl SearchGraph {
         })
     }
 
-    #[allow(unused)]
     pub fn num_slash(&self) -> usize {
         let primal = &self.primal;
         let primal_width = self.config.width as i32;
@@ -53,7 +52,6 @@ impl SearchGraph {
             .count()
     }
 
-    #[allow(unused)]
     pub fn num_back_slash(&self) -> usize {
         let primal = &self.primal;
         let primal_width = self.config.width as i32;
