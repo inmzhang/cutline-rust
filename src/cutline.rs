@@ -32,18 +32,14 @@ impl Cutline {
             .into_iter()
             .filter(|e| primal.edge_weight(e.0, e.1).unwrap().to_owned())
             .collect_vec();
-        let wedge_candidates = split
-            .iter()
-            .combinations(2)
-            .filter_map(|comb| {
-                let (e1, e2) = (*comb[0], *comb[1]);
-                if e1.0 == e2.0 || e1.0 == e2.1 || e1.1 == e2.0 || e1.1 == e2.1 {
-                    Some((graph.edge_index(e1.0, e1.1), graph.edge_index(e2.0, e2.1)))
-                } else {
-                    None
-                }
-            })
-            .collect_vec();
+        let wedge_candidates = split.iter().combinations(2).filter_map(|comb| {
+            let (e1, e2) = (*comb[0], *comb[1]);
+            if e1.0 == e2.0 || e1.0 == e2.1 || e1.1 == e2.0 || e1.1 == e2.1 {
+                Some((graph.edge_index(e1.0, e1.1), graph.edge_index(e2.0, e2.1)))
+            } else {
+                None
+            }
+        });
         let dcd_candidates = split
             .iter()
             .filter_map(|&(n1, n2)| {
@@ -65,6 +61,11 @@ impl Cutline {
                 }
             })
             .collect_vec();
+
+        // move those wedge candidates overlapping with dcd candidates to the end of the list
+        let (mut wedge_candidates, v2): (Vec<_>, Vec<_>) = wedge_candidates
+            .partition(|&(e1, e2)| dcd_candidates.iter().all(|&(d, _)| d != e1 && d != e2));
+        wedge_candidates.extend(v2);
 
         let split = split
             .into_iter()
