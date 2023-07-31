@@ -32,8 +32,7 @@ impl Cutline {
             .into_iter()
             .filter(|e| primal.edge_weight(e.0, e.1).unwrap().to_owned())
             .collect_vec();
-        let wedge_candidates = split.iter().combinations(2).filter_map(|comb| {
-            let (e1, e2) = (*comb[0], *comb[1]);
+        let wedge_candidates = split.iter().tuple_windows().filter_map(|(&e1, &e2)| {
             if e1.0 == e2.0 || e1.0 == e2.1 || e1.1 == e2.0 || e1.1 == e2.1 {
                 Some((graph.edge_index(e1.0, e1.1), graph.edge_index(e2.0, e2.1)))
             } else {
