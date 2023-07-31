@@ -13,7 +13,9 @@ use cutline::search_cutlines;
 use graph::SearchGraph;
 use itertools::Itertools;
 use pattern::{pattern_from_repr, pattern_repr, Order};
+use petgraph::visit::{Dfs, EdgeRef};
 use search_pattern::search_bit_patterns;
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::PathBuf;
@@ -100,11 +102,30 @@ fn print_and_log<W: Write>(writter: &mut W, s: &str) -> Result<()> {
     Ok(())
 }
 
-fn record_repr(record: &Record, n_slash: usize) -> String {
+fn split_part(split: &Vec<cutline::Edge>, graph: &SearchGraph) -> Vec<usize> {
+    let node_map: HashMap<_, _> = graph
+        .primal
+        .nodes()
+        .enumerate()
+        .map(|(i, n)| (n, i))
+        .collect();
+    let filtered_graph = petgraph::visit::EdgeFiltered::from_fn(&graph.primal, |e| {
+        let (source, target) = (e.source(), e.target());
+        !split.contains(&(source.min(target), source.max(target))) && *e.weight()
+    });
+    let mut dfs = Dfs::new(&filtered_graph, graph.primal.nodes().nth(1).unwrap());
+    let mut part = Vec::new();
+    while let Some(qubit) = dfs.next(&filtered_graph) {
+        part.push(node_map[&qubit]);
+    }
+    part
+}
+
+fn record_repr(record: &Record, graph: &SearchGraph) -> String {
     format!(
-        "Record {{ pattern: {}, cutline: {:?}, cost: {:?} }}",
-        pattern_repr(&record.pattern, n_slash),
-        &record.cutline,
+        "Record {{ pattern: {}, split_part0: {:?}, cost: {:?} }}",
+        pattern_repr(&record.pattern, graph.num_slash()),
+        split_part(&record.cutline.split, graph),
         &record.cost,
     )
 }
@@ -209,7 +230,7 @@ fn main() -> Result<()> {
     writeln!(
         &mut result,
         "An example of optimal cutline:\n{}",
-        record_repr(&optimal_cutline[0], n_slash)
+        record_repr(&optimal_cutline[0], &graph)
     )?;
 
     writeln!(

@@ -110,6 +110,10 @@ fn create_primal(config: &TopologyConfig) -> Result<(CutGraph, Vec<Point>)> {
         .map(|(i, (y, x))| ((x as i32, y as i32), i as u32))
         .collect();
 
+    qubits_map.iter().for_each(|(&n, _)| {
+        primal.add_node(n);
+    });
+
     qubits_map.iter().for_each(|(&(x, y), _)| {
         if y == (height - 1) as i32 {
             return;
