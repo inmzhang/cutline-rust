@@ -102,7 +102,7 @@ fn print_and_log<W: Write>(writter: &mut W, s: &str) -> Result<()> {
     Ok(())
 }
 
-fn split_part(split: &Vec<cutline::Edge>, graph: &SearchGraph) -> Vec<usize> {
+fn split_part(split: &[cutline::Edge], graph: &SearchGraph) -> Vec<usize> {
     let node_map: HashMap<_, _> = graph
         .primal
         .nodes()

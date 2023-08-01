@@ -261,10 +261,16 @@ mod tests {
         let graph = SearchGraph::from_config(config).unwrap();
         let context = Context::from_graph(&graph);
         let pattern = pattern_from_repr("1_0100110010_0_10011001010");
-        assert_eq!(pattern_repr(&pattern, graph.num_slash()), "1_0100110010_0_10011001010");
+        assert_eq!(
+            pattern_repr(&pattern, graph.num_slash()),
+            "1_0100110010_0_10011001010"
+        );
         assert_eq!(pattern.look_up((1, 0), (0, 1), &context), Some(Order::D));
         assert_eq!(pattern.look_up((3, 2), (2, 4), &context), Some(Order::C));
-        assert_eq!(pattern.look_up((11, 10), (10, 11), &context), Some(Order::C));
+        assert_eq!(
+            pattern.look_up((11, 10), (10, 11), &context),
+            Some(Order::C)
+        );
         assert_eq!(pattern.look_up((6, 1), (7, 2), &context), Some(Order::A));
         assert_eq!(pattern.look_up((10, 1), (11, 2), &context), Some(Order::A));
         assert_eq!(pattern.look_up((11, 8), (10, 9), &context), Some(Order::D));
