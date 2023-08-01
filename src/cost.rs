@@ -282,3 +282,126 @@ fn cost_for_cutline(
         unbalance: cutline.unbalance,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        config::{AlgorithmConfigBuilder, TopologyConfigBuilder},
+        cutline::{self, search_cutlines},
+        pattern::pattern_from_repr,
+    };
+    use petgraph::visit::{Dfs, EdgeRef};
+    use std::collections::HashMap;
+
+    use super::*;
+
+    fn split_part(split: &[cutline::Edge], graph: &SearchGraph) -> Vec<usize> {
+        let node_map: HashMap<_, _> = graph
+            .primal
+            .nodes()
+            .enumerate()
+            .map(|(i, n)| (n, i))
+            .collect();
+        let filtered_graph = petgraph::visit::EdgeFiltered::from_fn(&graph.primal, |e| {
+            let (source, target) = (e.source(), e.target());
+            !split.contains(&(source.min(target), source.max(target))) && *e.weight()
+        });
+        let mut dfs = Dfs::new(&filtered_graph, graph.primal.nodes().nth(1).unwrap());
+        let mut part = Vec::new();
+        while let Some(qubit) = dfs.next(&filtered_graph) {
+            part.push(node_map[&qubit]);
+        }
+        part
+    }
+
+    #[test]
+    fn test_cost_for_cutline() {
+        let topo = TopologyConfigBuilder::default()
+            .height(12)
+            .unused_qubits(vec![11, 5])
+            .build()
+            .unwrap();
+        let graph = SearchGraph::from_config(topo).unwrap();
+        let order = "ABCDCDABABCDCDABABCDCDAB";
+        let ordering = order
+            .chars()
+            .map(|c| Order::try_from(c).unwrap())
+            .collect_vec();
+        let algo = AlgorithmConfigBuilder::default()
+            .ordering(ordering)
+            .max_unbalance(20)
+            .max_depth(12)
+            .build()
+            .unwrap();
+        let pattern = pattern_from_repr("1_0011100000_0_00000011000");
+        let order_vec = pattern.order_vec(&graph);
+        let order_info = OrderInfo::new(&algo.ordering);
+        let mut use_flags = UsedBoard::new(graph.primal.edge_count(), order_info.ordering.len());
+        // let cutline = Cutline {
+        //     split: vec![
+        //         ((9, 2), (10, 3)),
+        //         ((8, 3), (9, 4)),
+        //         ((7, 4), (8, 5)),
+        //         ((6, 5), (7, 6)),
+        //         ((6, 7), (7, 6)),
+        //         ((6, 7), (7, 8)),
+        //         ((5, 8), (6, 9)),
+        //         ((4, 9), (5, 10)),
+        //         ((3, 10), (4, 11)),
+        //     ],
+        //     unbalance: 20,
+        // };
+        let cutline = Cutline {
+            split: vec![
+                ((8, 1), (9, 2)),
+                ((7, 2), (8, 3)),
+                ((6, 3), (7, 4)),
+                ((5, 4), (6, 5)),
+                ((4, 5), (5, 6)),
+                ((3, 6), (4, 7)),
+                ((2, 7), (3, 8)),
+                ((2, 9), (3, 8)),
+                ((3, 10), (4, 9)),
+                ((3, 10), (4, 11)),
+            ],
+            unbalance: 0,
+        };
+        // let cutline = Cutline {
+        //     split: vec![
+        //         ((6, 1), (7, 0)),
+        //         ((6, 1), (7, 2)),
+        //         ((5, 2), (6, 3)),
+        //         ((4, 3), (5, 4)),
+        //         ((4, 5), (5, 4)),
+        //         ((4, 5), (5, 6)),
+        //         ((4, 7), (5, 6)),
+        //         ((4, 7), (5, 8)),
+        //         ((4, 9), (5, 8)),
+        //         ((5, 10), (6, 9)),
+        //         ((6, 11), (7, 10)),
+        //     ],
+        //     unbalance: 0,
+        // };
+        let cutline_wrapped = cutline.clone().into_wrapped(&graph);
+        let cost = cost_for_cutline(&order_vec, &cutline_wrapped, &order_info, &mut use_flags);
+        dbg!(cost.cost());
+        dbg!(cost);
+        let cutlines = search_cutlines(&graph, &algo);
+        let mut reverse_split = cutline.split.clone();
+        reverse_split.reverse();
+        let reverse_cutline = Cutline {
+            split: reverse_split,
+            unbalance: 0,
+        };
+        assert!(cutlines.contains(&cutline) || cutlines.contains(&reverse_cutline));
+        // let cutlines_wrapped = cutlines
+        //     .into_iter()
+        //     .map(|c| c.into_wrapped(&graph))
+        //     .collect_vec();
+        // let (i, cost) = calculate_min_cost(&graph, pattern, &cutlines_wrapped, &order_info);
+        // let found = Cutline::from_wrapper(cutlines_wrapped[i].clone(), &graph);
+        // dbg!(cost.cost());
+        // println!("{:?}", split_part(&found.split, &graph));
+        // dbg!(cost);
+    }
+}
