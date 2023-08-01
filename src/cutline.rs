@@ -217,7 +217,7 @@ fn search_paths_between(
 fn compute_unbalance(graph: &SearchGraph, used_qubits: &Vec<Point>, split: &Split) -> usize {
     let filtered_graph = EdgeFiltered::from_fn(&graph.primal, |e| {
         let (source, target) = (e.source(), e.target());
-        !split.contains(&(source.min(target), source.max(target)))
+        *e.weight() && !split.contains(&(source.min(target), source.max(target)))
     });
     let mut dfs = Dfs::new(&filtered_graph, used_qubits[0]);
     let mut count = 0;
