@@ -217,23 +217,6 @@ fn cost_for_cutline(
         })
         .sum();
 
-    // start and end swap reduction
-    let mut start_end_elision: usize = 0;
-    let start_order = *ordering.first().unwrap();
-    let end_order = *ordering.last().unwrap();
-    let depth = ordering.len() - 1;
-    for &e in split {
-        let order = order_vec[e].unwrap();
-        if order == start_order {
-            use_flags.set_used(0, e);
-            start_end_elision += 1;
-        }
-        if order == end_order {
-            use_flags.set_used(depth, e);
-            start_end_elision += 1;
-        }
-    }
-
     // Wedge fusion
     let mut n_wedge: usize = 0;
     for &(i, order1, order2) in potential_wedges {
@@ -269,6 +252,23 @@ fn cost_for_cutline(
                     n_dcd += 1;
                 }
             }
+        }
+    }
+
+    // start and end swap reduction
+    let mut start_end_elision: usize = 0;
+    let start_order = *ordering.first().unwrap();
+    let end_order = *ordering.last().unwrap();
+    let depth = ordering.len() - 1;
+    for &e in split {
+        let order = order_vec[e].unwrap();
+        if order == start_order && !use_flags.is_used(0, e) {
+            use_flags.set_used(0, e);
+            start_end_elision += 1;
+        }
+        if order == end_order && !use_flags.is_used(depth, e) {
+            use_flags.set_used(depth, e);
+            start_end_elision += 1;
         }
     }
 
