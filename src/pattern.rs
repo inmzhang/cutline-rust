@@ -115,13 +115,20 @@ pub fn pattern_repr(pattern: &BitPattern, n_slash: usize) -> String {
     let last_flip: &str = if pattern[0] { "0" } else { "1" };
     let raw = pattern.to_string();
     let (first, remain) = raw.split_at(1);
-    let (middle, last) = remain.split_at(n_slash);
+    let (mut middle, mut last) = remain.split_at(n_slash);
+    if pattern[0] {
+        std::mem::swap(&mut middle, &mut last);
+    }
     vec![first, "_", middle, "_", last_flip, "_", last].join("")
 }
 
 pub fn pattern_from_repr(repr: &str) -> BitPattern {
     let splitted = repr.split('_').collect_vec();
-    let bin_str = vec![splitted[0], splitted[1], splitted[3]].join("");
+    let (mut middle, mut last) = (splitted[1], splitted[3]);
+    if splitted[0] == "1" {
+        std::mem::swap(&mut middle, &mut last);
+    }
+    let bin_str = vec![splitted[0], middle, last].join("");
     let mut pattern = BitPattern::with_capacity(bin_str.len());
     for (i, c) in bin_str.char_indices() {
         if c == '1' {
@@ -155,7 +162,7 @@ pub fn slash_index(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graph::SearchGraph;
+    use crate::{config::TopologyConfigBuilder, graph::SearchGraph};
 
     macro_rules! trivial_pattern_test {
         ($graph:ident, $pattern:ident, $orders:expr) => {
@@ -233,5 +240,33 @@ mod tests {
         assert_eq!(pattern.to_string(), "100000000000000000000");
         assert_eq!(pattern_repr(&pattern, n_slash), "1_0000000000_0_0000000000");
         assert_eq!(pattern_from_repr("1_0000000000_0_0000000000"), pattern);
+
+        pattern.put(1);
+        assert_eq!(pattern.to_string(), "110000000000000000000");
+        assert_eq!(pattern_repr(&pattern, n_slash), "1_0000000000_0_1000000000");
+        assert_eq!(pattern_from_repr("1_0000000000_0_1000000000"), pattern);
+        let graph = SearchGraph::default();
+        let context = Context::from_graph(&graph);
+        assert_eq!(pattern.look_up((1, 0), (0, 1), &context), Some(Order::D));
+    }
+
+    #[test]
+    fn test_pattern_corresponds_to_js() {
+        let pattern = BitPattern::with_capacity_and_blocks(21, vec![3]);
+        let graph = SearchGraph::default();
+        let context = Context::from_graph(&graph);
+        assert_eq!(pattern.look_up((1, 0), (0, 1), &context), Some(Order::D));
+
+        let config = TopologyConfigBuilder::default().height(12).build().unwrap();
+        let graph = SearchGraph::from_config(config).unwrap();
+        let context = Context::from_graph(&graph);
+        let pattern = pattern_from_repr("1_0100110010_0_10011001010");
+        assert_eq!(pattern_repr(&pattern, graph.num_slash()), "1_0100110010_0_10011001010");
+        assert_eq!(pattern.look_up((1, 0), (0, 1), &context), Some(Order::D));
+        assert_eq!(pattern.look_up((3, 2), (2, 4), &context), Some(Order::C));
+        assert_eq!(pattern.look_up((11, 10), (10, 11), &context), Some(Order::C));
+        assert_eq!(pattern.look_up((6, 1), (7, 2), &context), Some(Order::A));
+        assert_eq!(pattern.look_up((10, 1), (11, 2), &context), Some(Order::A));
+        assert_eq!(pattern.look_up((11, 8), (10, 9), &context), Some(Order::D));
     }
 }
